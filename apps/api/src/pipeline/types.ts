@@ -81,6 +81,7 @@ export interface TimelineEntry {
 }
 
 export interface Explanation {
+  id: string;
   term: string;
   plainText: string;
   sourceLines: number[];

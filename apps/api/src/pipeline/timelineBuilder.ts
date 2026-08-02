@@ -85,7 +85,7 @@ export async function buildTimeline(
       const sourceLines = Array.isArray(t.sourceLines)
         ? validLines
           ? t.sourceLines.filter((n) => validLines.has(n))
-          : t.sourceLines
+          : t.sourceLines.filter((n) => Number.isInteger(n))
         : [];
       return {
         id: randomUUID(),
@@ -93,7 +93,7 @@ export async function buildTimeline(
         title: t.title ?? "",
         detail: t.detail ?? "",
         sourceLines,
-        confidence: t.confidence ?? 0,
+        confidence: Math.max(0, Math.min(100, t.confidence ?? 0)),
       };
     });
 

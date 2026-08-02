@@ -56,8 +56,9 @@ export async function detectWarnings(
 
     const result: Warning[] = warnings.map((w) => {
       const sourceLines = Array.isArray(w.sourceLines)
-        ? w.sourceLines.filter((n) => validLines.has(n))
+        ? w.sourceLines.filter((n) => Number.isInteger(n) && validLines.has(n))
         : [];
+      const confidence = Math.max(0, Math.min(100, w.confidence ?? 0));
       return {
         id: randomUUID(),
         symptom: w.symptom ?? "",
@@ -67,9 +68,7 @@ export async function detectWarnings(
         severity: w.severity === "call-doctor" ? "call-doctor" : "emergency",
         sourceLines,
         confidence:
-          sourceLines.length > 0
-            ? (w.confidence ?? 0)
-            : Math.min(w.confidence ?? 0, 50),
+          sourceLines.length > 0 ? confidence : Math.min(confidence, 50),
       };
     });
 

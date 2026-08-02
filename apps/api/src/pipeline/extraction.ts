@@ -41,6 +41,8 @@ const SECTION_KEYS: (keyof ExtractedSections)[] = [
   "otherText",
 ];
 
+const MAX_TEXT_SIZE = 1024 * 1024;
+
 /**
  * Model output is untrusted input ? normalize missing/wrong-typed fields to
  * empty strings so downstream stages can safely call `.trim()` / `.length`
@@ -61,9 +63,18 @@ export async function runExtraction(
   ocr: OcrResult,
 ): Promise<StageResult<ExtractedSections>> {
   try {
+    if (ocr.lines.length === 0) {
+      return fail("OCR produced no text to extract");
+    }
     const numberedText = ocr.lines
       .map((l) => `${l.line}: ${l.text}`)
       .join("\n");
+    if (numberedText.trim().length === 0) {
+      return fail("OCR text is empty after formatting");
+    }
+    if (numberedText.length > MAX_TEXT_SIZE) {
+      return fail("OCR text exceeds the safe processing limit");
+    }
     const raw = await callJson<
       Partial<Record<keyof ExtractedSections, unknown>>
     >({

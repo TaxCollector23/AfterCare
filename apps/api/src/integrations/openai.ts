@@ -14,6 +14,7 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL ?? "gpt-4o-mini";
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
 const BACKOFF_MS = [500, 1_000, 2_000];
+const PROVIDER_TIMEOUT_MS = 30_000;
 
 const IMAGE_MIME_TYPES = new Set([
   "image/png",
@@ -35,6 +36,21 @@ function providerCredentials(): AiProviderCredentials {
 
 const sleep = (milliseconds: number) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function withTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new AiProviderFailure("timeout")),
+      PROVIDER_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function withRetry<T>(
   operation: () => Promise<T>,
@@ -83,14 +99,16 @@ async function openaiJson(
 ) {
   const client = new OpenAI({ apiKey });
   return withRetry(async () => {
-    const response = await client.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    });
+    const response = await withTimeout(
+      client.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      }),
+    );
     const content = response.choices[0]?.message?.content;
     if (!content) throw new AiProviderFailure("parsing");
     return content;
@@ -110,7 +128,9 @@ async function geminiJson(
       systemInstruction: system,
       generationConfig: { responseMimeType: "application/json" },
     });
-    const text = (await model.generateContent(user)).response.text();
+    const text = (
+      await withTimeout(model.generateContent(user))
+    ).response.text();
     if (!text) throw new AiProviderFailure("parsing");
     return text;
   }, maxRetries);
@@ -143,16 +163,18 @@ async function openaiVision(apiKey: string, buffer: Buffer, mimeType: string) {
   const client = new OpenAI({ apiKey });
   return withRetry(async () => {
     const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
-    const response = await client.chat.completions.create({
-      model: OPENAI_VISION_MODEL,
-      messages: [
-        { role: "system", content: VISION_INSTRUCTION },
-        {
-          role: "user",
-          content: [{ type: "image_url", image_url: { url: dataUrl } }],
-        },
-      ],
-    });
+    const response = await withTimeout(
+      client.chat.completions.create({
+        model: OPENAI_VISION_MODEL,
+        messages: [
+          { role: "system", content: VISION_INSTRUCTION },
+          {
+            role: "user",
+            content: [{ type: "image_url", image_url: { url: dataUrl } }],
+          },
+        ],
+      }),
+    );
     const content = response.choices[0]?.message?.content;
     if (!content) throw new AiProviderFailure("parsing");
     return content;
@@ -164,10 +186,12 @@ async function geminiVision(apiKey: string, buffer: Buffer, mimeType: string) {
   return withRetry(async () => {
     const model = client.getGenerativeModel({ model: GEMINI_MODEL });
     const text = (
-      await model.generateContent([
-        VISION_INSTRUCTION,
-        { inlineData: { mimeType, data: buffer.toString("base64") } },
-      ])
+      await withTimeout(
+        model.generateContent([
+          VISION_INSTRUCTION,
+          { inlineData: { mimeType, data: buffer.toString("base64") } },
+        ]),
+      )
     ).response.text();
     if (!text) throw new AiProviderFailure("parsing");
     return text;

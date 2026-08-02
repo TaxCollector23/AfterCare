@@ -61,8 +61,9 @@ export async function detectAppointments(
 
     const result: Appointment[] = appointments.map((a) => {
       const sourceLines = Array.isArray(a.sourceLines)
-        ? a.sourceLines.filter((n) => validLines.has(n))
+        ? a.sourceLines.filter((n) => Number.isInteger(n) && validLines.has(n))
         : [];
+      const confidence = Math.max(0, Math.min(100, a.confidence ?? 0));
       return {
         id: randomUUID(),
         date: a.date ?? null,
@@ -73,9 +74,7 @@ export async function detectAppointments(
         notes: a.notes ?? "",
         sourceLines,
         confidence:
-          sourceLines.length > 0
-            ? (a.confidence ?? 0)
-            : Math.min(a.confidence ?? 0, 50),
+          sourceLines.length > 0 ? confidence : Math.min(confidence, 50),
       };
     });
 

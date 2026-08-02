@@ -5,6 +5,7 @@
  * Every explanation must be grounded in where the term appears in the
  * document (sourceLines) ? this is not a general medical dictionary lookup.
  */
+import { randomUUID } from "node:crypto";
 import { callJson } from "../integrations/openai.js";
 import {
   ok,
@@ -56,16 +57,16 @@ export async function generateExplanations(
 
     const result: Explanation[] = explanations.map((e) => {
       const sourceLines = Array.isArray(e.sourceLines)
-        ? e.sourceLines.filter((n) => validLines.has(n))
+        ? e.sourceLines.filter((n) => Number.isInteger(n) && validLines.has(n))
         : [];
+      const confidence = Math.max(0, Math.min(100, e.confidence ?? 0));
       return {
+        id: randomUUID(),
         term: e.term ?? "",
         plainText: e.plainText ?? "",
         sourceLines,
         confidence:
-          sourceLines.length > 0
-            ? (e.confidence ?? 0)
-            : Math.min(e.confidence ?? 0, 50),
+          sourceLines.length > 0 ? confidence : Math.min(confidence, 50),
       };
     });
 
