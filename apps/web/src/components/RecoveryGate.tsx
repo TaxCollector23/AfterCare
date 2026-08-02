@@ -5,8 +5,21 @@ import { EmptyState } from "./EmptyState";
 import { ErrorBanner } from "./ErrorBanner";
 import type { RecoveryData } from "../types";
 
-export function RecoveryGate({ children }: { children: (data: RecoveryData) => React.ReactNode }) {
-  const { data, loading, error, hasAnyDocuments, hasPendingDocument } = useActiveRecoveryData();
+type RecoveryEmptyState = {
+  icon: string;
+  title: string;
+  description: string;
+};
+
+export function RecoveryGate({
+  children,
+  emptyState,
+}: {
+  children: (data: RecoveryData) => React.ReactNode;
+  emptyState?: RecoveryEmptyState;
+}) {
+  const { data, loading, error, hasAnyDocuments, hasPendingDocument } =
+    useActiveRecoveryData();
 
   if (loading) {
     return (
@@ -18,8 +31,26 @@ export function RecoveryGate({ children }: { children: (data: RecoveryData) => R
   if (error) return <ErrorBanner message={error} />;
   if (data) return <>{children(data)}</>;
 
-  // Only the backend actually processes documents. Saying "still processing" in
-  // local mode would describe work that isn't happening.
+  // The dashboard owns onboarding. Other destinations describe their own
+  // empty content without repeating the same upload call to action.
+  if (emptyState) {
+    const isActivelyProcessing =
+      hasPendingDocument && currentMode() === "backend";
+    return (
+      <EmptyState
+        icon={emptyState.icon}
+        title={
+          isActivelyProcessing ? "Preparing this section" : emptyState.title
+        }
+        description={
+          isActivelyProcessing
+            ? "This section will fill in automatically when your document is ready."
+            : emptyState.description
+        }
+      />
+    );
+  }
+
   if (hasPendingDocument && currentMode() === "backend") {
     return (
       <EmptyState
@@ -53,11 +84,11 @@ export function RecoveryGate({ children }: { children: (data: RecoveryData) => R
   return (
     <EmptyState
       icon="ph-file-plus"
-      title="Add your paperwork to get started"
-      description="Upload your discharge summary or doctor's report, take a photo of it, or connect it from Google Drive."
+      title="Build your recovery guide"
+      description="Add a discharge summary or doctor's report once, and AfterCare will organize the details here."
       action={
         <Link to="/upload" className="btn btn-solid">
-          Add your paperwork
+          Add a document
         </Link>
       }
     />

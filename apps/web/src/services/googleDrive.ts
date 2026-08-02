@@ -10,7 +10,8 @@
  * the "Connect Google Drive" button rather than call into this module.
  */
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID as string | undefined;
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID as
+  string | undefined;
 const API_KEY = import.meta.env.VITE_GOOGLE_DRIVE_API_KEY as string | undefined;
 const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 
@@ -19,7 +20,7 @@ export const isGoogleDriveConfigured = Boolean(CLIENT_ID && API_KEY);
 export class GoogleDriveNotConfiguredError extends Error {
   constructor() {
     super(
-      "The Google Drive connector isn't set up yet. Add VITE_GOOGLE_DRIVE_CLIENT_ID and VITE_GOOGLE_DRIVE_API_KEY to apps/web/.env.local."
+      "The Google Drive connector isn't set up yet. Add VITE_GOOGLE_DRIVE_CLIENT_ID and VITE_GOOGLE_DRIVE_API_KEY to apps/web/.env.local.",
     );
     this.name = "GoogleDriveNotConfiguredError";
   }
@@ -31,6 +32,11 @@ export interface DrivePickedFile {
   mimeType: string;
   /** Short-lived OAuth access token, needed to fetch bytes for the picked file if you download it. */
   accessToken: string;
+}
+
+interface GooglePickerResult {
+  action: string;
+  docs: Array<{ id: string; name: string; mimeType: string }>;
 }
 
 let scriptsLoadingPromise: Promise<void> | null = null;
@@ -69,7 +75,10 @@ function loadPickerLibrary(): Promise<void> {
       reject(new Error("Google API script did not load."));
       return;
     }
-    gapi.load("picker", { callback: () => resolve(), onerror: () => reject(new Error("Failed to load Picker.")) });
+    gapi.load("picker", {
+      callback: () => resolve(),
+      onerror: () => reject(new Error("Failed to load Picker.")),
+    });
   });
 }
 
@@ -107,16 +116,23 @@ export async function pickFileFromGoogleDrive(): Promise<DrivePickedFile | null>
   return new Promise((resolve, reject) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const g = (window as any).google;
-    const view = new g.picker.DocsView(g.picker.ViewId.PDFS).setIncludeFolders(true).setSelectFolderEnabled(false);
+    const view = new g.picker.DocsView(g.picker.ViewId.PDFS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(false);
 
     const picker = new g.picker.PickerBuilder()
       .addView(view)
       .setOAuthToken(accessToken)
       .setDeveloperKey(API_KEY)
-      .setCallback((data: any) => {
+      .setCallback((data: GooglePickerResult) => {
         if (data.action === g.picker.Action.PICKED) {
           const doc = data.docs[0];
-          resolve({ id: doc.id, name: doc.name, mimeType: doc.mimeType, accessToken });
+          resolve({
+            id: doc.id,
+            name: doc.name,
+            mimeType: doc.mimeType,
+            accessToken,
+          });
         } else if (data.action === g.picker.Action.CANCEL) {
           resolve(null);
         } else if (data.action === g.picker.Action.ERROR) {
@@ -130,9 +146,15 @@ export async function pickFileFromGoogleDrive(): Promise<DrivePickedFile | null>
 
 /** Downloads the picked file's bytes directly from Drive using the short-lived access token. */
 export async function fetchDriveFileBlob(file: DrivePickedFile): Promise<Blob> {
-  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-    headers: { Authorization: `Bearer ${file.accessToken}` },
-  });
-  if (!res.ok) throw new Error("Couldn't download that file from Google Drive. Please try again.");
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`,
+    {
+      headers: { Authorization: `Bearer ${file.accessToken}` },
+    },
+  );
+  if (!res.ok)
+    throw new Error(
+      "Couldn't download that file from Google Drive. Please try again.",
+    );
   return res.blob();
 }

@@ -23,9 +23,9 @@ describe("database migration", () => {
     );
     database.public.none(await readFile(migrationPath, "utf8"));
 
-    const tables = database.public.many<{ table_name: string }>(
+    const tables = database.public.many(
       "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
-    );
+    ) as Array<{ table_name: string }>;
     expect(tables.map(({ table_name }) => table_name).sort()).toEqual([
       "appointments",
       "audit_logs",

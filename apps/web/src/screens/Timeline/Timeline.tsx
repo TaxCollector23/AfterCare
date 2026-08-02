@@ -5,11 +5,25 @@ export default function Timeline() {
   return (
     <div>
       <h1>Recovery timeline</h1>
-      <p className="gloss measure">Built from the milestones and follow-ups in your document.</p>
-      <RecoveryGate>
+      <p className="gloss measure">
+        See milestones and follow-up steps from your active recovery guide in
+        order.
+      </p>
+      <RecoveryGate
+        emptyState={{
+          icon: "ph-clock-counter-clockwise",
+          title: "No recovery timeline yet",
+          description:
+            "Milestones and follow-up steps from your active recovery guide will appear here in order.",
+        }}
+      >
         {(data) =>
           data.timeline.length === 0 ? (
-            <EmptyState icon="ph-clock-counter-clockwise" title="No timeline yet" description="Your document didn't include enough milestone information to build a timeline." />
+            <EmptyState
+              icon="ph-clock-counter-clockwise"
+              title="No timeline yet"
+              description="Your document didn't include enough milestone information to build a timeline."
+            />
           ) : (
             <div>
               {data.timeline.map((t) => (
@@ -19,11 +33,23 @@ export default function Timeline() {
                     style={{
                       marginTop: 6,
                       background:
-                        t.status === "done" ? "var(--color-accent)" : t.status === "today" ? "var(--color-accent-2)" : "var(--n400)",
+                        t.status === "done"
+                          ? "var(--color-accent)"
+                          : t.status === "today"
+                            ? "var(--color-accent-2)"
+                            : "var(--n400)",
                     }}
                   />
                   <div>
-                    <p className="gloss" style={{ marginBottom: 2, textTransform: "uppercase", fontSize: 13, letterSpacing: "0.08em" }}>
+                    <p
+                      className="gloss"
+                      style={{
+                        marginBottom: 2,
+                        textTransform: "uppercase",
+                        fontSize: 13,
+                        letterSpacing: "0.08em",
+                      }}
+                    >
                       {t.label}
                     </p>
                     <h3>{t.title}</h3>

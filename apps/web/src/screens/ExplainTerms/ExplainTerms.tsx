@@ -5,11 +5,24 @@ export default function ExplainTerms() {
   return (
     <div>
       <h1>Explain these terms</h1>
-      <p className="gloss measure">Medical terms found in your document, explained in plain language.</p>
-      <RecoveryGate>
+      <p className="gloss measure">
+        Review medical terms from your active document in plain language.
+      </p>
+      <RecoveryGate
+        emptyState={{
+          icon: "ph-book-open-text",
+          title: "No terms to explain yet",
+          description:
+            "Plain-language explanations from your active recovery guide will appear here.",
+        }}
+      >
         {(data) =>
           data.glossary.length === 0 ? (
-            <EmptyState icon="ph-book-open-text" title="No terms yet" description="Once your document is processed, any medical terms it uses will be explained here." />
+            <EmptyState
+              icon="ph-book-open-text"
+              title="No terms yet"
+              description="Once your document is processed, any medical terms it uses will be explained here."
+            />
           ) : (
             <div>
               {data.glossary.map((g) => (
@@ -19,7 +32,10 @@ export default function ExplainTerms() {
                     {g.plainLanguage}
                   </p>
                   {g.sourceExcerpt && (
-                    <p className="gloss" style={{ fontStyle: "italic", fontSize: 14 }}>
+                    <p
+                      className="gloss"
+                      style={{ fontStyle: "italic", fontSize: 14 }}
+                    >
                       &ldquo;{g.sourceExcerpt}&rdquo;
                     </p>
                   )}

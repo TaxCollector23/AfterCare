@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: aftercare-api
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WEB_ORIGIN
+        value: https://aftercare-web-eta.vercel.app
+      - key: API_RATE_LIMIT
+        value: "500"
+      - key: UPLOAD_RATE_LIMIT
+        value: "100"
+      - key: MOCK_INTEGRATIONS
+        value: "false"
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: STORAGE_ENCRYPTION_KEY
+        sync: false
+      - key: GOOGLE_STATE_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY_PRIMARY
+        sync: false
+      - key: GEMINI_API_KEY_FALLBACK
+        sync: false

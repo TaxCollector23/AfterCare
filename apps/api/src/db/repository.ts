@@ -62,6 +62,10 @@ export const repository = {
     const document = state.documents.get(documentId);
     return document?.userId === userId ? document : undefined;
   },
+  /** Internal pipeline lookup; authorization is enforced by the route before enqueue/ask. */
+  findDocumentById(documentId: string) {
+    return state.documents.get(documentId);
+  },
   findDocumentByHash(fileHash: string, userId: string) {
     return [...state.documents.values()].find(
       (document) =>
