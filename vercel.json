@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "apps/web/.next",
+  "root": "apps/web",
+  "buildCommand": "npm run build --filter @discharge/shared-types... --filter @discharge/web",
+  "outputDirectory": ".next",
   "framework": "nextjs"
 }
