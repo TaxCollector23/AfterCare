@@ -5,6 +5,10 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { repository } from "../db/repository.js";
 import { AppError, unauthorized } from "../errors.js";
+import {
+  verifyGoogleIdToken,
+  type IdTokenVerifier,
+} from "../integrations/googleIdentity.js";
 import { createTokens, hashToken } from "../middleware/auth.js";
 
 const credentials = z.object({
@@ -42,6 +46,8 @@ function verifyRefreshToken(raw: string): string {
   return claims.sub;
 }
 
+const googleSchema = z.object({ idToken: z.string().min(1).max(4096) });
+
 export const authRouter = Router();
 
 authRouter.post("/register", async (req, res, next) => {
@@ -74,8 +80,18 @@ authRouter.post("/login", async (req, res, next) => {
     if (!parsed.success)
       throw new AppError(400, "Valid credentials required", "INVALID_INPUT");
     const user = repository.findUserByEmail(parsed.data.email);
+    if (user && user.passwordHash === null) {
+      // Tell them which door to use. "Email or password is incorrect" would be
+      // technically true and completely unhelpful for a Google-created account.
+      throw new AppError(
+        409,
+        "This account uses Google sign-in. Continue with Google instead.",
+        "USE_GOOGLE_SIGN_IN",
+      );
+    }
     if (
       !user ||
+      !user.passwordHash ||
       !(await bcrypt.compare(parsed.data.password, user.passwordHash))
     ) {
       throw new AppError(
@@ -122,6 +138,45 @@ authRouter.post("/refresh", async (req, res, next) => {
     next(error);
   }
 });
+
+/**
+ * Sign in (or sign up) with Google.
+ *
+ * One route for both: Google has already proven the person controls the
+ * address, so a first-time sign-in creates the account rather than dead-ending
+ * on "no account found".
+ *
+ * `verifyIdToken` is injected so tests can exercise the account logic without
+ * reaching Google; production uses the real verifier.
+ */
+export function createGoogleAuthRouter(
+  verifyIdToken: IdTokenVerifier = verifyGoogleIdToken,
+) {
+  const router = Router();
+  router.post("/", async (req, res, next) => {
+    try {
+      const parsed = googleSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw new AppError(400, "A Google ID token is required", "INVALID_INPUT");
+      }
+
+      const identity = await verifyIdToken(parsed.data.idToken);
+      const existing = repository.findUserByEmail(identity.email);
+
+      // An existing password account is kept and signed in, not duplicated:
+      // Google has verified the same address, so it's the same person.
+      const user =
+        existing ?? repository.createUser(identity.email, null, "google");
+
+      res
+        .status(existing ? 200 : 201)
+        .json(await issueSession(user.id, user.email));
+    } catch (error) {
+      next(error);
+    }
+  });
+  return router;
+}
 
 authRouter.post("/logout", async (req, res, next) => {
   try {

@@ -8,6 +8,7 @@ import { databaseHealth } from "./db/client.js";
 import { providerCooldownStatus } from "./integrations/aiProviderWaterfall.js";
 import { AiApiError, AppError } from "./errors.js";
 import { googleDriveStatus } from "./integrations/googleDrive.js";
+import type { IdTokenVerifier } from "./integrations/googleIdentity.js";
 import { storageStatus } from "./integrations/storage.js";
 import { authenticate } from "./middleware/auth.js";
 import { hipaaAuditLog } from "./middleware/hipaaLogging.js";
@@ -17,7 +18,7 @@ import { pipelineQueue, type PipelineQueue } from "./queue/pipelineQueue.js";
 import { accessibilityRouter } from "./routes/accessibility.js";
 import { appointmentsRouter } from "./routes/appointments.js";
 import { createAskRouter, type AskGroundedFunction } from "./routes/ask.js";
-import { authRouter } from "./routes/auth.js";
+import { authRouter, createGoogleAuthRouter } from "./routes/auth.js";
 import { documentsRouter } from "./routes/documents.js";
 import { driveCallbackRouter, driveRouter } from "./routes/drive.js";
 import { medicationsRouter } from "./routes/medications.js";
@@ -30,6 +31,8 @@ interface CreateAppOptions {
   heartbeatMs?: number;
   /** Per-user hourly budget for /ask; overrides ASK_RATE_LIMIT. */
   askRateLimit?: number;
+  /** Test seam for POST /auth/google, so tests never reach Google. */
+  verifyGoogleIdToken?: IdTokenVerifier;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -82,6 +85,7 @@ export function createApp(options: CreateAppOptions = {}) {
       },
     });
   });
+  app.use("/auth/google", apiRateLimit, createGoogleAuthRouter(options.verifyGoogleIdToken));
   app.use("/auth", apiRateLimit, authRouter);
   app.use("/drive", driveCallbackRouter);
 

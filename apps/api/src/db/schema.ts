@@ -5,10 +5,19 @@ import type {
   StructuredAiError,
 } from "@discharge-guide/shared-types";
 
+export type AuthProvider = "password" | "google";
+
 export interface UserRecord {
   id: string;
   email: string;
-  passwordHash: string;
+  /**
+   * Null for accounts created through Google, which have no password to
+   * compare against. Modelled explicitly rather than storing an unmatchable
+   * placeholder hash, so /login can refuse them with a useful message instead
+   * of a generic "email or password is incorrect".
+   */
+  passwordHash: string | null;
+  provider: AuthProvider;
   createdAt: string;
 }
 

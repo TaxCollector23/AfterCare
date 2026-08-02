@@ -108,6 +108,19 @@ export const backendRegister = (email: string, password: string) =>
 export const backendLogin = (email: string, password: string) =>
   credentials("login", email, password);
 
+/** Exchanges a Google ID token for an AfterCare session. */
+export async function backendGoogleSignIn(idToken: string): Promise<BackendUser> {
+  const res = await fetch(`${apiBaseUrl}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  const body = (await res.json()) as StoredTokens;
+  writeTokens(body);
+  return body.user;
+}
+
 /* ------------------------------ documents ---------------------------- */
 
 export interface UploadResult {

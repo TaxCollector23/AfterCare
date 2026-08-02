@@ -8,6 +8,7 @@
 
 import { currentMode, isFirebaseConfigured, type DataMode } from "./config";
 import {
+  backendGoogleSignIn,
   backendLogin,
   backendRegister,
   clearSession as clearBackendSession,
@@ -81,6 +82,24 @@ export async function signUp(email: string, password: string): Promise<AppUser> 
   const { signUp: firebaseSignUp } = await import("./auth");
   const u = await firebaseSignUp(email, password);
   return { uid: u.uid, email: u.email, isLocal: false };
+}
+
+/**
+ * Completes a Google sign-in.
+ *
+ * Backend mode exchanges the ID token for an AfterCare session; Firebase mode
+ * has already signed in via its popup by this point, so the user is re-read.
+ */
+export async function signInWithGoogle(idToken?: string): Promise<AppUser> {
+  const mode = currentMode();
+  if (mode === "backend") {
+    if (!idToken) throw new Error("Google didn't return a sign-in token.");
+    const user = await backendGoogleSignIn(idToken);
+    return { uid: user.id, email: user.email, isLocal: false };
+  }
+  const resolved = await resolveUser(mode);
+  if (!resolved) throw new Error("Google sign-in didn't complete.");
+  return resolved;
 }
 
 export async function signOut(): Promise<void> {

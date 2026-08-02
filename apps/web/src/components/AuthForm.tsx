@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { friendlySessionError, signIn, signUp } from "../services/session";
+import { isGoogleSignInAvailable } from "../services/googleSignIn";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 
 type Mode = "signin" | "signup";
 
@@ -15,6 +17,7 @@ export function AuthForm() {
   // The API requires 12+ characters; Firebase accepts 6. Ask for whatever the
   // active backing service will actually accept.
   const minLength = dataMode === "backend" ? 12 : 6;
+  const googleAvailable = isGoogleSignInAvailable();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +40,23 @@ export function AuthForm() {
 
   return (
     <div className="card auth-card">
+      {/* Google first: it's the primary route in, and for most people it's one
+          tap with nothing to remember. Email and password stay below as the
+          fallback for anyone without a Google account, or when Google's script
+          is blocked. */}
+      {googleAvailable && (
+        <>
+          <GoogleSignInButton onError={setError} />
+          <div className="row-between" style={{ margin: "var(--sp4) 0" }}>
+            <hr className="hair" style={{ flex: 1 }} />
+            <span className="gloss" style={{ fontSize: 14 }}>
+              or use an email address
+            </span>
+            <hr className="hair" style={{ flex: 1 }} />
+          </div>
+        </>
+      )}
+
       <div className="auth-toggle" role="tablist">
         <button
           role="tab"

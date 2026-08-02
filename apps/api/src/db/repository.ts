@@ -8,6 +8,7 @@ import type {
   AccessibilityPreferences,
   AdherenceRecord,
   AuditLogRecord,
+  AuthProvider,
   DatabaseState,
   DocumentRecord,
   SessionRecord,
@@ -26,11 +27,16 @@ const state: DatabaseState = {
 };
 
 export const repository = {
-  createUser(email: string, passwordHash: string): UserRecord {
+  createUser(
+    email: string,
+    passwordHash: string | null,
+    provider: AuthProvider = "password",
+  ): UserRecord {
     const user = {
       id: randomUUID(),
       email,
       passwordHash,
+      provider,
       createdAt: new Date().toISOString(),
     };
     state.users.set(user.id, user);
