@@ -1,9 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @dischargeguide/web build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://aftercare-api.onrender.com/:path*"
+    },
     { "source": "/:path((?!api(?:/|$)).*)", "destination": "/index.html" }
   ]
 }

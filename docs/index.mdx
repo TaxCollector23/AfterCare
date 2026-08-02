@@ -1,0 +1,51 @@
+---
+title: "AfterCare"
+description: "Understand your own discharge paperwork."
+---
+
+AfterCare turns a hospital discharge summary into something a patient can actually
+act on: what to take, when to take it, which appointments are coming, and which
+symptoms mean call someone now.
+
+<Warning>
+  AfterCare explains the document you upload. It never replaces medical advice, and
+  it never invents a medication, dose, appointment, or warning that isn't in your
+  paperwork. When confidence is low it says so and points you back at the original.
+</Warning>
+
+## How it fits together
+
+| Piece | Lives in | Deployed on |
+| --- | --- | --- |
+| Web app (Vite + React) | `apps/web` | Vercel |
+| API + pipeline (Express) | `apps/api` | Render |
+| Shared contracts | `packages/shared-types` | consumed by both |
+
+The web app calls the API at `/api`, which Vercel proxies to the Render service, so
+the browser only ever talks to its own origin.
+
+## The pipeline
+
+A document moves through seven stages, and the Processing screen streams each one
+over Server-Sent Events as it lands:
+
+`ocr` → `extract` → `meds` → `appts` → `warnings` → `timeline` → `explain`
+
+OCR and extraction are required — if either fails the run stops. The five detection
+stages degrade independently, so one unreadable section produces an empty list
+rather than an empty dashboard.
+
+Every extracted item carries `sourceLines` pointing back at the numbered OCR text it
+came from, plus a confidence score. Anything below the threshold is surfaced with a
+"check the original document" prompt rather than shown as settled fact.
+
+## Running it locally
+
+```bash
+pnpm install
+pnpm dev
+```
+
+With no configuration at all the app runs in local mode: it loads, and documents are
+stored in your own browser. Connecting the API unlocks the pipeline — see
+[Architecture](/docs/architecture) for the environment variables involved.
