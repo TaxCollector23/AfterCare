@@ -8,6 +8,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Read once at job level so the steps below can branch on whether Vercel is
+    # wired up. The secrets context is not available in a step-level `if`.
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +29,19 @@ jobs:
       - name: Build
         run: pnpm --filter @dischargeguide/web build
 
+      # Without the three Vercel secrets this step fails on every push and turns
+      # the whole branch red, which buries real CI failures. Deploying is
+      # optional — Vercel's own git integration can serve this project — so skip
+      # rather than fail, and say why.
+      - name: Skip Vercel deploy (not configured)
+        if: env.VERCEL_TOKEN == ''
+        run: |
+          echo "::notice::VERCEL_TOKEN is not set — skipping the Vercel deploy."
+          echo "To deploy from CI, add VERCEL_TOKEN, VERCEL_ORG_ID and"
+          echo "VERCEL_PROJECT_ID under Settings -> Secrets -> Actions."
+
       - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
         uses: BetaHuhn/deploy-to-vercel-action@v1
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
