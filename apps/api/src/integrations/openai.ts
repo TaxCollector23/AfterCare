@@ -28,6 +28,9 @@ const openaiModel = () => process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 const openaiVisionModel = () =>
   process.env.OPENAI_VISION_MODEL ?? "gpt-4o-mini";
 const geminiModel = () => process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+/** The Gemini fallback slot can use a cheaper/different model (e.g. flash-lite). */
+const geminiFallbackModel = () =>
+  process.env.GEMINI_FALLBACK_MODEL ?? geminiModel();
 const openrouterModel = () =>
   process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-chat-v3-0324:free";
 
@@ -222,11 +225,12 @@ async function geminiJson(
   system: string,
   user: string,
   maxRetries?: number,
+  modelName?: string,
 ) {
   const client = new GoogleGenerativeAI(apiKey);
   return withRetry(async () => {
     const model = client.getGenerativeModel({
-      model: geminiModel(),
+      model: modelName ?? geminiModel(),
       systemInstruction: system,
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -253,7 +257,7 @@ export async function callJson<T = unknown>(options: JsonCallOptions) {
     ? `${system}\n\nRespond ONLY with JSON matching:\n${schemaHint}`
     : system;
 
-  const raw = await providerText(({ family, apiKey }) =>
+  const raw = await providerText(({ family, apiKey, slot }) =>
     family === "openai"
       ? openaiJson(apiKey, fullSystem, user, model ?? openaiModel(), maxRetries)
       : family === "openrouter"
@@ -264,7 +268,13 @@ export async function callJson<T = unknown>(options: JsonCallOptions) {
             openrouterModelOverride ?? openrouterModel(),
             maxRetries,
           )
-        : geminiJson(apiKey, fullSystem, user, maxRetries),
+        : geminiJson(
+            apiKey,
+            fullSystem,
+            user,
+            maxRetries,
+            slot === "gemini_fallback" ? geminiFallbackModel() : undefined,
+          ),
   );
 
   // Parsing happens after provider selection so programming/schema bugs never
@@ -294,10 +304,15 @@ async function openaiVision(apiKey: string, buffer: Buffer, mimeType: string) {
   });
 }
 
-async function geminiVision(apiKey: string, buffer: Buffer, mimeType: string) {
+async function geminiVision(
+  apiKey: string,
+  buffer: Buffer,
+  mimeType: string,
+  modelName?: string,
+) {
   const client = new GoogleGenerativeAI(apiKey);
   return withRetry(async () => {
-    const model = client.getGenerativeModel({ model: geminiModel() });
+    const model = client.getGenerativeModel({ model: modelName ?? geminiModel() });
     const text = (
       await withTimeout(
         model.generateContent([
@@ -323,10 +338,15 @@ export async function visionTranscribe(buffer: Buffer, mimeType: string) {
   delete visionCredentials.openrouter;
 
   return providerText(
-    ({ family, apiKey }) =>
+    ({ family, apiKey, slot }) =>
       family === "openai"
         ? openaiVision(apiKey, buffer, mimeType)
-        : geminiVision(apiKey, buffer, mimeType),
+        : geminiVision(
+            apiKey,
+            buffer,
+            mimeType,
+            slot === "gemini_fallback" ? geminiFallbackModel() : undefined,
+          ),
     visionCredentials,
   );
 }

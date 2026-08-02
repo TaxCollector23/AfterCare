@@ -9,6 +9,7 @@ import type {
   AskGroundedResult,
 } from "@discharge-guide/shared-types";
 import type { GroundedAnswer, OcrResult } from "./types.js";
+import { cacheOcr, ocrCacheKey } from "../cache/index.js";
 import { repository } from "../db/repository.js";
 import { loadDocument } from "../integrations/storage.js";
 import { callJson } from "../integrations/openai.js";
@@ -112,10 +113,19 @@ export async function askGrounded(
       retryable: false,
     };
   }
-  const ocr = await runOcr({
-    buffer: await loadDocument(document.storageKey),
-    mimeType: document.mimeType,
-  });
+  // Re-using the document's file hash keeps repeat questions on the same
+  // document from re-running OCR (expensive for scanned PDFs). The storage
+  // read stays inside the compute callback so a cache hit skips it too.
+  // Only successful OCR results are cached, so transient failures retry.
+  const ocr = await cacheOcr(
+    ocrCacheKey(document.fileHash),
+    async () =>
+      runOcr({
+        buffer: await loadDocument(document.storageKey),
+        mimeType: document.mimeType,
+      }),
+    (result) => result.success === true,
+  );
   if (!ocr.success || !ocr.data) {
     return {
       code: "AI_PROVIDER_UNAVAILABLE",

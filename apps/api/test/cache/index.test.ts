@@ -19,11 +19,15 @@ vi.mock("redis", () => ({
 import {
   cacheExtraction,
   cacheExplanations,
+  cacheOcr,
   closeCache,
+  ocrCacheSize,
+  resetOcrCache,
 } from "../../src/cache/index.js";
 
 beforeEach(async () => {
   store.clear();
+  resetOcrCache();
   process.env.REDIS_URL = "redis://fake-for-tests";
   await closeCache(); // drop the cached client singleton between tests
 });
@@ -72,5 +76,52 @@ describe("cacheExtraction / cacheExplanations", () => {
     await cacheExplanations("hash-c", compute);
 
     expect(compute).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("cacheOcr", () => {
+  it("returns a cached successful result without re-running compute", async () => {
+    const compute = vi.fn(async () => ({
+      success: true,
+      data: "ocr text",
+      confidence: 99,
+      sourceLines: [1],
+    }));
+
+    const first = await cacheOcr("ocr:hash-a", compute, (r) => r.success);
+    const second = await cacheOcr("ocr:hash-a", compute, (r) => r.success);
+
+    expect(first).toEqual(second);
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT cache a failed OCR result so transient failures still retry", async () => {
+    const compute = vi.fn(async () => ({
+      success: false,
+      data: null,
+      confidence: 0,
+      error: "vision provider down",
+      sourceLines: [],
+    }));
+
+    await cacheOcr("ocr:hash-b", compute, (r) => r.success);
+    await cacheOcr("ocr:hash-b", compute, (r) => r.success);
+
+    expect(compute).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not share entries across different keys", async () => {
+    const compute = vi.fn(async () => ({ success: true }));
+    await cacheOcr("ocr:one", compute, () => true);
+    await cacheOcr("ocr:two", compute, () => true);
+    expect(compute).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays bounded under heavy distinct-document load", async () => {
+    const compute = vi.fn(async () => ({ success: true }));
+    for (let i = 0; i < 600; i++) {
+      await cacheOcr(`ocr:bulk-${i}`, compute, () => true);
+    }
+    expect(ocrCacheSize()).toBe(500);
   });
 });

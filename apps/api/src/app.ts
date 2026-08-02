@@ -49,6 +49,17 @@ export function createApp(options: CreateAppOptions = {}) {
       database: databaseStatus(),
       storage: storageStatus(),
       integrations: [googleDriveStatus()],
+      // Ops visibility into the free-tier AI waterfall: which providers are
+      // configured (never their keys) and the per-provider request timeout.
+      ai: {
+        timeoutMs: config.AI_TIMEOUT_MS,
+        waterfall: {
+          openai: Boolean(config.OPENAI_API_KEY),
+          openrouter: Boolean(config.OPENROUTER_API_KEY),
+          geminiPrimary: Boolean(config.GEMINI_API_KEY_PRIMARY),
+          geminiFallback: Boolean(config.GEMINI_API_KEY_FALLBACK),
+        },
+      },
     });
   });
   app.use("/auth", apiRateLimit, authRouter);

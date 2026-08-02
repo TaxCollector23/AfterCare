@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { openaiCreateMock, geminiGenerateContentMock } = vi.hoisted(() => ({
-  openaiCreateMock: vi.fn(),
-  geminiGenerateContentMock: vi.fn(),
-}));
+const { openaiCreateMock, geminiGenerateContentMock, geminiModels } =
+  vi.hoisted(() => ({
+    openaiCreateMock: vi.fn(),
+    geminiGenerateContentMock: vi.fn(),
+    geminiModels: [] as string[],
+  }));
 
 vi.mock("openai", () => {
   class OpenAI {
@@ -14,7 +16,8 @@ vi.mock("openai", () => {
 
 vi.mock("@google/generative-ai", () => {
   class GoogleGenerativeAI {
-    getGenerativeModel() {
+    getGenerativeModel({ model }: { model: string }) {
+      geminiModels.push(model);
       return { generateContent: geminiGenerateContentMock };
     }
   }
@@ -31,6 +34,7 @@ const ENV_KEYS = [
   "AI_TIMEOUT_MS",
   "OPENROUTER_MODEL",
   "GEMINI_MODEL",
+  "GEMINI_FALLBACK_MODEL",
   "OPENAI_MODEL",
 ] as const;
 
@@ -42,6 +46,7 @@ beforeEach(() => {
   // resetAllMocks, not clearAllMocks: clearing leaves queued `*Once` values in
   // place, so an unconsumed queue from a failing test leaks into the next one.
   vi.resetAllMocks();
+  geminiModels.length = 0;
   for (const key of ENV_KEYS) delete process.env[key];
 });
 
@@ -221,6 +226,36 @@ describe("provider SDK adapters", () => {
     await expect(callJson({ system: "s", user: "u" })).resolves.toEqual({
       g: 7,
     });
+  });
+
+  it("uses GEMINI_FALLBACK_MODEL for the Gemini fallback slot", async () => {
+    process.env.GEMINI_API_KEY_PRIMARY = "gemini-primary-test";
+    process.env.GEMINI_API_KEY_FALLBACK = "gemini-fallback-test";
+    process.env.GEMINI_MODEL = "gemini-2.5-flash";
+    process.env.GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite";
+    geminiGenerateContentMock
+      .mockRejectedValueOnce(providerError(429))
+      .mockResolvedValueOnce(geminiOk('{"j":10}'));
+
+    await expect(
+      callJson({ system: "s", user: "u", maxRetries: 0 }),
+    ).resolves.toEqual({ j: 10 });
+    expect(geminiModels).toEqual([
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+    ]);
+  });
+
+  it("uses the primary Gemini model when only the primary slot is configured", async () => {
+    process.env.GEMINI_API_KEY_PRIMARY = "gemini-primary-test";
+    process.env.GEMINI_MODEL = "gemini-2.5-flash";
+    process.env.GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite";
+    geminiGenerateContentMock.mockResolvedValueOnce(geminiOk('{"k":11}'));
+
+    await expect(callJson({ system: "s", user: "u" })).resolves.toEqual({
+      k: 11,
+    });
+    expect(geminiModels).toEqual(["gemini-2.5-flash"]);
   });
 
   it("applies a configurable per-provider AI timeout", async () => {

@@ -163,6 +163,20 @@ describe("DischargeGuide API", () => {
     );
   });
 
+  it("reports which AI providers are configured without leaking keys", async () => {
+    const response = await request(app).get("/health").expect(200);
+    // In the test environment no AI credentials are set, so every provider
+    // must report as unconfigured and no key material may appear.
+    expect(response.body.ai.timeoutMs).toBe(45_000);
+    expect(response.body.ai.waterfall).toEqual({
+      openai: false,
+      openrouter: false,
+      geminiPrimary: false,
+      geminiFallback: false,
+    });
+    expect(JSON.stringify(response.body.ai)).not.toMatch(/key|secret|sk-/i);
+  });
+
   it("registers and logs in with JWT access and refresh tokens", async () => {
     const token = await register();
     expect(token).toBeTypeOf("string");
