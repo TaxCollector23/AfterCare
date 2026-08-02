@@ -96,7 +96,14 @@ export interface GroundedAnswer {
 }
 
 export type PipelineStage =
-  "ocr" | "extract" | "meds" | "appts" | "warnings" | "timeline" | "explain";
+  | "ocr"
+  | "extract"
+  | "meds"
+  | "appts"
+  | "warnings"
+  | "timeline"
+  | "explain"
+  | "judge";
 
 export interface PipelineStageEvent {
   stage: PipelineStage;

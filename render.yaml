@@ -34,7 +34,13 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      # Free-tier AI: OpenRouter `:free` models and Gemini Flash fall back
+      # automatically when a paid OpenAI quota runs out.
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: GEMINI_API_KEY_PRIMARY
         sync: false
       - key: GEMINI_API_KEY_FALLBACK
         sync: false
+      - key: AI_TIMEOUT_MS
+        value: "45000"

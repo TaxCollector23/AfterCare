@@ -8,3 +8,7 @@ dist/
 *.tsbuildinfo
 coverage/
 *.log
+.next/
+next-env.d.ts
+# Root copy of the discharge-guide fixture; the committed copy lives in apps/api/test/fixtures/
+aftercare-broadsheet.html

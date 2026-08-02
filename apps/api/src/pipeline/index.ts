@@ -15,6 +15,7 @@ import { detectAppointments } from "./appointmentDetection.js";
 import { detectWarnings } from "./warningDetection.js";
 import { buildTimeline } from "./timelineBuilder.js";
 import { generateExplanations } from "./explanationGenerator.js";
+import { applyJudgeVerdicts, judgeConfidence, judgeFindings } from "./judge.js";
 import { cacheExtraction, cacheExplanations } from "../cache/index.js";
 import type {
   PipelineEmitter,
@@ -101,19 +102,19 @@ export async function runPipeline(
   medsEvents.started();
   const medsResult = await detectMedications(sections.medicationsText, ocr);
   medsEvents.settle(medsResult, "Medication detection failed");
-  const medications = medsResult.data ?? [];
+  let medications = medsResult.data ?? [];
 
   const apptsEvents = emitStage(emit, "appts");
   apptsEvents.started();
   const apptsResult = await detectAppointments(sections.appointmentsText, ocr);
   apptsEvents.settle(apptsResult, "Appointment detection failed");
-  const appointments = apptsResult.data ?? [];
+  let appointments = apptsResult.data ?? [];
 
   const warningsEvents = emitStage(emit, "warnings");
   warningsEvents.started();
   const warningsResult = await detectWarnings(sections.warningsText, ocr);
   warningsEvents.settle(warningsResult, "Warning detection failed");
-  const warnings = warningsResult.data ?? [];
+  let warnings = warningsResult.data ?? [];
 
   const timelineEvents = emitStage(emit, "timeline");
   timelineEvents.started();
@@ -133,6 +134,37 @@ export async function runPipeline(
   explainEvents.settle(explainResult, "Explanation generation failed");
   const explanations = explainResult.data ?? [];
 
+  // Stage 6: the LLM judge re-verifies the structured findings against the
+  // source text. Degrades gracefully: if judging fails, the original findings
+  // are kept untouched and the stage contributes full confidence.
+  const judgeEvents = emitStage(emit, "judge");
+  judgeEvents.started();
+  const judgeResult = await judgeFindings(ocr, {
+    medications,
+    appointments,
+    warnings,
+  });
+  let judgeConf = 100;
+  if (judgeResult.success && judgeResult.data) {
+    const judged = applyJudgeVerdicts(
+      { medications, appointments, warnings },
+      judgeResult.data,
+    );
+    medications = judged.medications;
+    appointments = judged.appointments;
+    warnings = judged.warnings;
+    judgeConf = judgeConfidence(judgeResult.data);
+    judgeEvents.done({
+      ...judgeResult,
+      data: {
+        overall: judgeResult.data.overall,
+        reviewReasons: judged.reviewReasons,
+      },
+    });
+  } else {
+    judgeEvents.settle(judgeResult, "Verification failed");
+  }
+
   const allConfidences = [
     ocrResult.confidence,
     extraction.confidence,
@@ -141,6 +173,7 @@ export async function runPipeline(
     warningsResult.confidence,
     timelineResult.confidence,
     explainResult.confidence,
+    judgeConf,
   ];
 
   return {

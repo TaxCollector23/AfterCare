@@ -26,6 +26,19 @@ paths:
       security: []
       responses:
         "200": { description: Authenticated }
+  /auth/refresh:
+    post:
+      summary: Rotate an access token from a valid refresh token
+      security: []
+      responses:
+        "200": { description: New token pair; the old refresh token is revoked }
+        "401": { description: Invalid, expired, or reused refresh token }
+  /auth/logout:
+    post:
+      summary: Revoke the session behind a refresh token (idempotent)
+      security: []
+      responses:
+        "204": { description: Session revoked }
   /upload:
     post:
       summary: Upload discharge instructions and start processing
@@ -181,6 +194,17 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200": { description: Decrypted original document }
+  /documents/{documentId}:
+    delete:
+      summary: Delete a document, its file, plan, and related data (retention)
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Document deleted }
+        "404": { description: Document not found or not owned by the user }
 components:
   securitySchemes:
     bearerAuth:

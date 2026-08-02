@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
@@ -23,10 +24,11 @@ export function createTokens(userId: string) {
       subject: userId,
       expiresIn: "15m",
     }),
-    refreshToken: jwt.sign({ type: "refresh" }, config.JWT_REFRESH_SECRET, {
-      subject: userId,
-      expiresIn: "7d",
-    }),
+    refreshToken: jwt.sign(
+      { type: "refresh", jti: randomUUID() },
+      config.JWT_REFRESH_SECRET,
+      { subject: userId, expiresIn: "7d" },
+    ),
     accessExpiresInSeconds: 15 * 60,
     refreshExpiresInSeconds: 7 * 24 * 60 * 60,
   };

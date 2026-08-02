@@ -58,10 +58,10 @@ afterEach(() => {
   pipelineQueue.reset();
 });
 
-async function register() {
+async function register(email = "patient@example.com") {
   const response = await request(app)
     .post("/auth/register")
-    .send({ email: "patient@example.com", password: "a-safe-password-123" })
+    .send({ email, password: "a-safe-password-123" })
     .expect(201);
   return response.body.accessToken as string;
 }
@@ -489,5 +489,157 @@ describe("DischargeGuide API", () => {
       .set("authorization", `Bearer ${token}`)
       .expect(200);
     expect(preferences.body.textSize).toBe("large");
+  });
+
+  it("rotates refresh tokens on /auth/refresh and revokes the family on reuse", async () => {
+    const created = await request(app)
+      .post("/auth/register")
+      .send({ email: "rotate@example.com", password: "a-safe-password-123" })
+      .expect(201);
+    const firstRefresh = created.body.refreshToken as string;
+
+    const rotated = await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: firstRefresh })
+      .expect(200);
+    expect(rotated.body.accessToken).toBeTypeOf("string");
+    expect(rotated.body.refreshToken).not.toBe(firstRefresh);
+
+    // Reusing the old token is treated as theft: the whole family is revoked.
+    await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: firstRefresh })
+      .expect(401);
+    await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: rotated.body.refreshToken })
+      .expect(401);
+  });
+
+  it("rejects malformed or expired refresh tokens", async () => {
+    await request(app)
+      .post("/auth/refresh")
+      .send({ refreshToken: "not-a-real-token" })
+      .expect(401);
+    await request(app).post("/auth/refresh").send({}).expect(400);
+  });
+
+  it("logs out idempotently and revokes the refresh token", async () => {
+    const created = await request(app)
+      .post("/auth/register")
+      .send({ email: "logout@example.com", password: "a-safe-password-123" })
+      .expect(201);
+    const refreshToken = created.body.refreshToken as string;
+
+    await request(app).post("/auth/logout").send({ refreshToken }).expect(204);
+    await request(app).post("/auth/refresh").send({ refreshToken }).expect(401);
+    await request(app).post("/auth/logout").send({ refreshToken }).expect(204);
+  });
+
+  it("deletes a document, its stored file, plan, medications, and adherence", async () => {
+    const token = await register();
+    const bytes = Buffer.from("retention-test-document");
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${token}`)
+      .attach("document", bytes, {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const { documentId } = upload.body;
+
+    await request(app)
+      .get(`/documents/${documentId}/original`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/documents/${documentId}`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(204);
+
+    await request(app)
+      .get(`/documents/${documentId}/original`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(404);
+    await request(app)
+      .delete(`/documents/${documentId}`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it("removes plan data and adherence records when a document is deleted", async () => {
+    const token = await register();
+    const user = repository.findUserByEmail("patient@example.com")!;
+    const documentId = "00000000-0000-4000-8000-000000000005";
+    const medicationId = "00000000-0000-4000-8000-000000000006";
+    repository.createDocument({
+      id: documentId,
+      userId: user.id,
+      filename: "instructions.pdf",
+      mimeType: "application/pdf",
+      fileHash: "delete-plan-hash",
+      storageKey: "delete-plan-key",
+      uploadedAt: new Date().toISOString(),
+      status: "ready",
+    });
+    repository.savePlan(documentId, {
+      documentId,
+      status: "ready",
+      disclaimer:
+        "This app explains instructions; it never replaces medical advice.",
+      isPlaceholder: false,
+      warnings: [],
+      timeline: [],
+      medications: [
+        {
+          id: medicationId,
+          name: "Source medication",
+          dose: "source dose",
+          frequency: "source frequency",
+          timing: "source timing",
+          instructions: "source instructions",
+          takenAt: [],
+          confidence: 90,
+          sourceLines: [2],
+        },
+      ],
+      appointments: [],
+    });
+    await request(app)
+      .post(`/medications/${medicationId}/taken`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(201);
+
+    await request(app)
+      .delete(`/documents/${documentId}`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(204);
+
+    const state = repository.inspect();
+    expect(state.documents.has(documentId)).toBe(false);
+    expect(state.medications.has(medicationId)).toBe(false);
+    expect(state.adherence).toEqual([]);
+  });
+
+  it("does not let one user delete another user's document", async () => {
+    const ownerToken = await register();
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .attach("document", Buffer.from("cross-user-delete"), {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const otherToken = await register("other@example.com");
+    await request(app)
+      .delete(`/documents/${upload.body.documentId}`)
+      .set("authorization", `Bearer ${otherToken}`)
+      .expect(404);
   });
 });

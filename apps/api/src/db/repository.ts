@@ -39,6 +39,14 @@ export const repository = {
   findUserByEmail(email: string) {
     return [...state.users.values()].find((user) => user.email === email);
   },
+  findUserById(userId: string) {
+    return state.users.get(userId);
+  },
+  deleteSessionsForUser(userId: string) {
+    for (const [id, session] of state.sessions) {
+      if (session.userId === userId) state.sessions.delete(id);
+    }
+  },
   createSession(
     userId: string,
     refreshTokenHash: string,
@@ -53,6 +61,14 @@ export const repository = {
     };
     state.sessions.set(session.id, session);
     return session;
+  },
+  listSessionsForUser(userId: string) {
+    return [...state.sessions.values()].filter(
+      (session) => session.userId === userId,
+    );
+  },
+  deleteSession(sessionId: string) {
+    state.sessions.delete(sessionId);
   },
   createDocument(document: DocumentRecord) {
     state.documents.set(document.id, document);
@@ -76,6 +92,26 @@ export const repository = {
     const document = state.documents.get(documentId);
     if (!document) return undefined;
     Object.assign(document, patch);
+    return document;
+  },
+  /** Owner-only hard delete: document, plan, medications, appointments, and adherence records. */
+  deleteDocument(documentId: string, userId: string) {
+    const document = state.documents.get(documentId);
+    if (!document || document.userId !== userId) return undefined;
+    const medicationIds = new Set(
+      (document.plan?.medications ?? []).map((medication) => medication.id),
+    );
+    for (const medicationId of medicationIds) {
+      state.medications.delete(medicationId);
+    }
+    for (const appointment of document.plan?.appointments ?? []) {
+      state.appointments.delete(appointment.id);
+    }
+    state.adherence = state.adherence.filter(
+      (record) =>
+        record.userId !== userId || !medicationIds.has(record.medicationId),
+    );
+    state.documents.delete(documentId);
     return document;
   },
   savePlan(documentId: string, plan: RecoveryPlan) {
