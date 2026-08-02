@@ -858,6 +858,114 @@ describe("DischargeGuide API", () => {
     expect(response.body.data[0].filename).toBe("instructions.pdf");
   });
 
+  it("retries a failed document without re-uploading", async () => {
+    aiMocks.runPipeline.mockRejectedValue({
+      code: "AI_PROVIDER_OUTAGE",
+      message: "provider diagnostics",
+      retryable: true,
+    });
+    const token = await register();
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${token}`)
+      .attach("document", Buffer.from("retry-me"), {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    // Three retryable attempts (25ms + 50ms backoff) land in the DLQ.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    let docs = await request(app)
+      .get("/documents")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(docs.body.data[0].status).toBe("failed");
+    expect(docs.body.data[0].failure.retryable).toBe(true);
+    expect(
+      pipelineQueue.getDeadLetter(upload.body.documentId)?.attempts,
+    ).toBe(3);
+
+    aiMocks.runPipeline.mockResolvedValue({
+      documentId: upload.body.documentId,
+      status: "ready",
+      disclaimer: "This app explains instructions; it never replaces medical advice.",
+      isPlaceholder: false,
+      medications: [],
+      appointments: [],
+      warnings: [],
+      timeline: [],
+    });
+    await request(app)
+      .post(`/documents/${upload.body.documentId}/retry`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    docs = await request(app)
+      .get("/documents")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(docs.body.data[0].status).toBe("ready");
+    expect(docs.body.data[0].planReady).toBe(true);
+    expect(pipelineQueue.getDeadLetter(upload.body.documentId)).toBeUndefined();
+  });
+
+  it("rejects retrying a document that did not fail", async () => {
+    aiMocks.runPipeline.mockResolvedValue({
+      documentId: "00000000-0000-4000-8000-000000000030",
+      status: "ready",
+      disclaimer: "This app explains instructions; it never replaces medical advice.",
+      isPlaceholder: false,
+      medications: [],
+      appointments: [],
+      warnings: [],
+      timeline: [],
+    });
+    const token = await register();
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${token}`)
+      .attach("document", Buffer.from("already-ready"), {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    await request(app)
+      .post(`/documents/${upload.body.documentId}/retry`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(409);
+  });
+
+  it("does not let one user retry another user's failed document", async () => {
+    aiMocks.runPipeline.mockRejectedValue({
+      code: "AI_PROVIDER_OUTAGE",
+      message: "provider diagnostics",
+      retryable: true,
+    });
+    const ownerToken = await register();
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${ownerToken}`)
+      .attach("document", Buffer.from("retry-cross-user"), {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const otherToken = await register("retry-other@example.com");
+    await request(app)
+      .post(`/documents/${upload.body.documentId}/retry`)
+      .set("authorization", `Bearer ${otherToken}`)
+      .expect(404);
+    await request(app)
+      .post(`/documents/${upload.body.documentId}/retry`)
+      .expect(401);
+  });
+
   it("rate limits /ask separately from the general API limit", async () => {
     const limitedApp = createApp({ askRateLimit: 2 });
 
