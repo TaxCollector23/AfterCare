@@ -3,7 +3,7 @@ import express from "express";
 import { ZodError } from "zod";
 import { config } from "./config.js";
 import { databaseStatus } from "./db/client.js";
-import { AppError } from "./errors.js";
+import { AiApiError, AppError } from "./errors.js";
 import { googleDriveStatus } from "./integrations/googleDrive.js";
 import { storageStatus } from "./integrations/storage.js";
 import { authenticate } from "./middleware/auth.js";
@@ -25,7 +25,7 @@ export function createApp() {
   app.set("trust proxy", 1);
   app.use(
     cors({
-      origin: config.WEB_ORIGIN,
+      origin: config.WEB_ORIGIN ?? false,
       credentials: true,
       methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["Authorization", "Content-Type", "Last-Event-ID"]
@@ -61,6 +61,10 @@ export function createApp() {
 
   app.use(
     (error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      if (error instanceof AiApiError) {
+        res.status(error.statusCode).json(error.publicError);
+        return;
+      }
       if (error instanceof AppError) {
         res.status(error.statusCode).json({ error: error.message, code: error.code, details: error.details });
         return;
@@ -73,7 +77,6 @@ export function createApp() {
         res.status(415).json({ error: error.message, code: "UNSUPPORTED_MEDIA_TYPE" });
         return;
       }
-      console.error("Unhandled API error", error instanceof Error ? error.message : "Unknown error");
       res.status(500).json({ error: "Unexpected server error", code: "INTERNAL_ERROR" });
     }
   );

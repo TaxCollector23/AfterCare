@@ -4,7 +4,7 @@ info:
   version: 0.1.0-placeholder
   description: Safe development contract. Clinical integrations are not live yet.
 servers:
-  - url: http://localhost:3001
+  - url: /
 security:
   - bearerAuth: []
 paths:
@@ -64,7 +64,7 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200":
-          description: SSE stream
+          description: SSE stream with provider-independent progress or sanitized failure events
           content:
             text/event-stream:
               schema: { type: string }
@@ -126,6 +126,16 @@ paths:
                 documentId: { type: string, format: uuid }
       responses:
         "200": { description: Grounded answer or explicit unavailable response }
+        "422":
+          description: Non-retryable safe validation failure
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StructuredAiError" }
+        "503":
+          description: Missing configuration, retryable outage, or provider exhaustion
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StructuredAiError" }
   /drive/status:
     get:
       summary: Google Drive integration status
@@ -177,3 +187,18 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  schemas:
+    StructuredAiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum:
+            - AI_PROVIDER_CONFIG_MISSING
+            - AI_PROVIDER_OUTAGE
+            - AI_PROVIDER_UNAVAILABLE
+            - AI_VALIDATION_FAILED
+        message: { type: string }
+        retryable: { type: boolean }

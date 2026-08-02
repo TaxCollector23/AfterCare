@@ -30,7 +30,16 @@ processRouter.get("/:documentId", (req, res) => {
     return;
   }
   if (document.status === "failed") {
-    res.write(`event: failed\ndata: ${JSON.stringify({ message: document.failureMessage })}\n\n`);
+    res.write(
+      `event: failed\ndata: ${JSON.stringify({
+        ...(document.failure ?? {
+          code: "AI_PROVIDER_UNAVAILABLE",
+          message: "AI processing is temporarily unavailable.",
+          retryable: true
+        }),
+        originalDocumentUrl: document.failureOriginalDocumentUrl
+      })}\n\n`
+    );
     res.end();
     return;
   }
@@ -40,8 +49,8 @@ processRouter.get("/:documentId", (req, res) => {
     res.write(`event: complete\ndata: ${JSON.stringify(plan)}\n\n`);
     res.end();
   });
-  const unsubscribeFailure = pipelineQueue.onFailure(documentId, (message) => {
-    res.write(`event: failed\ndata: ${JSON.stringify({ message })}\n\n`);
+  const unsubscribeFailure = pipelineQueue.onFailure(documentId, (error) => {
+    res.write(`event: failed\ndata: ${JSON.stringify(error)}\n\n`);
     res.end();
   });
   const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 15_000);

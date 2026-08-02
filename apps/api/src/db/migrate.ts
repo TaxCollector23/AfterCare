@@ -13,7 +13,6 @@ try {
   await client.query("SELECT pg_advisory_xact_lock(640218)");
   await client.query(migration);
   await client.query("COMMIT");
-  console.log("Applied migration 001_initial.sql");
 } catch (error) {
   await client.query("ROLLBACK");
   throw error;
