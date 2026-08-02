@@ -1,0 +1,15 @@
+import { useReadAloud } from "../hooks/useReadAloud";
+import { useAccessibility } from "../hooks/useAccessibility";
+
+/** The single accessibility control that lives in the header, per product direction:
+ *  no search/notifications/profile/settings clutter up top — just this. */
+export function ReadAloudButton() {
+  const { readAloudRate } = useAccessibility();
+  const { speaking, toggle } = useReadAloud(readAloudRate);
+  return (
+    <button className={`readbtn ${speaking ? "on" : ""}`} onClick={toggle} aria-pressed={speaking}>
+      <i className={`ph-duotone ${speaking ? "ph-stop-circle" : "ph-speaker-high"}`} aria-hidden="true" />
+      {speaking ? "Stop reading" : "Read this page to me"}
+    </button>
+  );
+}
