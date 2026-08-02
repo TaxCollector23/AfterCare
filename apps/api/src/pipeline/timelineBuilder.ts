@@ -82,7 +82,7 @@ export async function buildTimeline(
         title: t.title ?? '',
         detail: t.detail ?? '',
         sourceLines,
-        confidence: t.confidence ?? 0,
+        confidence: sourceLines.length > 0 ? (t.confidence ?? 0) : Math.min(t.confidence ?? 0, 50),
       };
     });
 

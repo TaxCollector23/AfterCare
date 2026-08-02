@@ -7,6 +7,7 @@
  */
 import { callJson } from '../integrations/openai.js';
 import { ok, fail, type Explanation, type OcrResult, type StageResult } from '@discharge/shared-types';
+import { randomUUID } from 'node:crypto';
 
 const SYSTEM_PROMPT = `You identify medical jargon in a numbered-line hospital discharge document
 and explain each term in plain language a patient over 60 with no medical
@@ -47,6 +48,7 @@ export async function generateExplanations(ocr: OcrResult): Promise<StageResult<
         ? e.sourceLines.filter((n) => validLines.has(n))
         : [];
       return {
+        id: randomUUID(),
         term: e.term ?? '',
         plainText: e.plainText ?? '',
         sourceLines,

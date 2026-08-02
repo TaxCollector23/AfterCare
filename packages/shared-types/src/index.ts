@@ -110,6 +110,7 @@ export interface TimelineEntry {
 
 /** Plain-language definition of a medical term found in the document. */
 export interface Explanation {
+  id: string;
   term: string;
   plainText: string;
   sourceLines: number[];
