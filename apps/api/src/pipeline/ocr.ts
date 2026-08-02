@@ -8,15 +8,16 @@
  * - PDFs with a text layer: `pdf-parse`, no LLM call, high confidence.
  * - Scanned PDFs (no text layer): each page is rasterized to a PNG via
  *   `pdf-to-img`, then transcribed through the vision waterfall.
+ *
+ * Text extraction deliberately does NOT use `pdf-parse`. That package bundles
+ * pdf.js v1.10.100, which keeps document state in module globals: the second
+ * and every later parse in the same process returns the FIRST document's text.
+ * In a long-lived API that means one patient being shown another patient's
+ * medications. `unpdf` builds a fresh document per call, and the regression is
+ * covered in test/pipeline/ocr.test.ts.
  * - Photos/images: transcribed directly through the vision waterfall.
  */
-// Import the inner lib directly, NOT the package root ('pdf-parse'). The
-// root index.js runs a debug self-test at import time when it thinks it has
-// no parent module (true for ESM interop), which throws ENOENT looking for
-// a test fixture that only exists inside pdf-parse's own repo.
-// See: https://gitlab.com/autokent/pdf-parse/-/blob/master/index.js
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
-import { pdf as rasterizePdf } from "pdf-to-img";
+import { extractText, getDocumentProxy } from "unpdf";
 import { visionTranscribe } from "../integrations/openai.js";
 import {
   ok,
@@ -78,23 +79,55 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
+type RasterizedDoc = AsyncIterable<Buffer> & { destroy?: () => unknown };
+
+/**
+ * Loads the rasterizer on demand. `pdf-to-img` pulls in `canvas`, a native
+ * module needing cairo/pango that is routinely missing from CI images and
+ * serverless runtimes. Importing it lazily keeps that failure contained to
+ * scanned PDFs instead of making this whole module unimportable — text-layer
+ * PDFs and photos never touch it.
+ */
+async function rasterizeOrExplain(buffer: Buffer): Promise<RasterizedDoc> {
+  let rasterize: (
+    input: Buffer,
+    options: { scale: number },
+  ) => Promise<RasterizedDoc>;
+  try {
+    ({ pdf: rasterize } = (await import("pdf-to-img")) as unknown as {
+      pdf: (
+        input: Buffer,
+        options: { scale: number },
+      ) => Promise<RasterizedDoc>;
+    });
+  } catch (cause) {
+    throw new Error(
+      "This looks like a scanned PDF, which needs page rasterization, but the " +
+        "image toolchain (pdf-to-img/canvas) is not available in this environment. " +
+        "Upload a photo of the pages instead, or install the native canvas build.",
+      { cause },
+    );
+  }
+  return rasterize(buffer, { scale: RASTER_SCALE });
+}
+
 async function extractFromPdf(buffer: Buffer): Promise<ExtractResult> {
-  const parsed = await pdfParse(buffer);
-  const hasTextLayer =
-    parsed.text.trim().length >=
-    MIN_CHARS_PER_PAGE * Math.max(parsed.numpages, 1);
+  // A fresh document proxy per call — see the state-leak note at the top.
+  const document = await getDocumentProxy(new Uint8Array(buffer));
+  const { text, totalPages } = await extractText(document, {
+    mergePages: true,
+  });
+  const pdfText = Array.isArray(text) ? text.join("\n") : String(text ?? "");
+  const pageCount = Math.max(totalPages, 1);
+  const hasTextLayer = pdfText.trim().length >= MIN_CHARS_PER_PAGE * pageCount;
 
   if (hasTextLayer) {
-    return {
-      text: parsed.text,
-      pageCount: parsed.numpages,
-      source: "pdf-text-layer",
-    };
+    return { text: pdfText, pageCount, source: "pdf-text-layer" };
   }
 
   // Scanned PDF with no real text layer: rasterize each page to a PNG and
   // transcribe it through the vision waterfall (OpenAI -> Gemini x2).
-  const doc = await rasterizePdf(buffer, { scale: RASTER_SCALE });
+  const doc = await rasterizeOrExplain(buffer);
   try {
     const pageImages: Buffer[] = [];
     for await (const pageImage of doc) {
@@ -116,7 +149,9 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractResult> {
       source: "vision",
     };
   } finally {
-    await doc.destroy();
+    // pdf-to-img dropped `destroy()` by v4.5; call it only if present.
+    const closable = doc as { destroy?: () => unknown };
+    if (typeof closable.destroy === "function") await closable.destroy();
   }
 }
 
