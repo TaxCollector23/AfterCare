@@ -184,6 +184,39 @@ paths:
       summary: Replace accessibility preferences
       responses:
         "200": { description: Updated preferences }
+  /documents:
+    get:
+      summary: List the authenticated user's documents, newest first
+      responses:
+        "200":
+          description: The user's documents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        filename: { type: string }
+                        mimeType: { type: string }
+                        status:
+                          type: string
+                          enum: [uploaded, processing, ready, failed]
+                        uploadedAt: { type: string, format: date-time }
+                        failure:
+                          type: object
+                          nullable: true
+                          properties:
+                            code: { type: string }
+                            message: { type: string }
+                            retryable: { type: boolean }
+                        originalUrl: { type: string }
+                        planReady: { type: boolean }
+        "401": { description: Missing or invalid bearer token }
   /documents/{documentId}/original:
     get:
       summary: Retrieve the authenticated user's original document
@@ -194,6 +227,28 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         "200": { description: Decrypted original document }
+  /documents/{documentId}/retry:
+    post:
+      summary: Re-run the pipeline for a document that failed processing
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Processing restarted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documentId: { type: string, format: uuid }
+                  status: { type: string }
+                  processUrl: { type: string }
+        "404": { description: Document not found or not owned by the user }
+        "409":
+          description: Document is not in a failed state or is already processing
   /documents/{documentId}:
     delete:
       summary: Delete a document, its file, plan, and related data (retention)

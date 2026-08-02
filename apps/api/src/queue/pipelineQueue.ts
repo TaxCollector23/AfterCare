@@ -87,6 +87,21 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
       queueMicrotask(() => void run(job));
       return job;
     },
+    /**
+     * Re-runs a finished (failed) job. Refuses to touch a job that is still
+     * queued or running. Clears the dead-letter entry and the replayed event
+     * history so the retried run starts fresh.
+     */
+    requeue(documentId: string) {
+      const job = jobs.get(documentId);
+      if (job && (job.state === "queued" || job.state === "running")) {
+        return undefined;
+      }
+      jobs.delete(documentId);
+      deadLetterQueue.delete(documentId);
+      history.delete(documentId);
+      return this.enqueue(documentId);
+    },
     subscribe(documentId: string, listener: (event: StreamEvent) => void) {
       events.on(documentId, listener);
       return () => events.off(documentId, listener);
