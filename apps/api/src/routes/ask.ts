@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
-import { documents } from "../db/schema.js";
-import { askGroundedQuestion } from "../integrations/anthropic.js";
+import { repository } from "../db/repository.js";
+import { askGrounded } from "../pipeline/ask.js";
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(1_000),
@@ -16,13 +16,12 @@ askRouter.post("/", async (req, res) => {
     res.status(400).json({ error: "A question and valid documentId are required." });
     return;
   }
-  const document = documents.get(parsed.data.documentId);
-  if (!document || document.userId !== req.userId) {
+  const document = repository.findDocument(parsed.data.documentId, req.userId!);
+  if (!document) {
     res.status(404).json({ error: "Document not found" });
     return;
   }
 
-  // OCR text is intentionally not persisted by the placeholder pipeline.
-  const answer = await askGroundedQuestion(parsed.data.question, "");
+  const answer = await askGrounded(parsed.data);
   res.json(answer);
 });

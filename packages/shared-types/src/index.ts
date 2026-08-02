@@ -1,12 +1,4 @@
-export type PipelineStage =
-  | "ocr"
-  | "extract"
-  | "detect_medications"
-  | "detect_appointments"
-  | "detect_warnings"
-  | "build_timeline"
-  | "generate_explanations"
-  | "complete";
+export type PipelineStage = "ocr" | "extract" | "meds" | "appts" | "warnings" | "timeline" | "explain";
 
 export interface GroundedResult<T> {
   success: boolean;
@@ -49,7 +41,7 @@ export interface WarningSign {
   sourceLines: number[];
 }
 
-export interface TimelineItem {
+export interface TimelineEntry {
   id: string;
   label: string;
   date: string | null;
@@ -65,16 +57,29 @@ export interface RecoveryPlan {
   medications: Medication[];
   appointments: Appointment[];
   warnings: WarningSign[];
-  timeline: TimelineItem[];
+  timeline: TimelineEntry[];
   isPlaceholder: boolean;
 }
 
-export interface ProcessingEvent {
-  documentId: string;
+export interface PipelineEvent {
   stage: PipelineStage;
   status: "started" | "completed" | "failed";
-  progress: number;
-  message: string;
-  partial?: unknown;
-  timestamp: string;
+  data: unknown;
+  error?: string;
+}
+
+export type PipelineEmit = (event: PipelineEvent) => void;
+
+export interface AskGroundedInput {
+  question: string;
+  documentId: string;
+}
+
+export interface AskGroundedResult {
+  answer: string;
+  confidence: number;
+  source: {
+    documentId: string;
+    sourceLines: number[];
+  };
 }

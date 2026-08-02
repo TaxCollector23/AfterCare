@@ -5,12 +5,27 @@ info:
   description: Safe development contract. Clinical integrations are not live yet.
 servers:
   - url: http://localhost:3001
+security:
+  - bearerAuth: []
 paths:
   /health:
     get:
       summary: API and provider configuration status
+      security: []
       responses:
         "200": { description: Healthy }
+  /auth/register:
+    post:
+      summary: Register and issue 15-minute access plus 7-day refresh tokens
+      security: []
+      responses:
+        "201": { description: Account created }
+  /auth/login:
+    post:
+      summary: Verify credentials and issue access plus refresh tokens
+      security: []
+      responses:
+        "200": { description: Authenticated }
   /upload:
     post:
       summary: Upload discharge instructions and start processing
@@ -121,6 +136,12 @@ paths:
       summary: Start limited drive.file OAuth
       responses:
         "200": { description: Authorization details }
+  /drive/callback:
+    get:
+      summary: Complete Google OAuth using a signed state token
+      security: []
+      responses:
+        "200": { description: Drive connected }
   /drive/import:
     post:
       summary: Import a discharge document from Drive
@@ -140,3 +161,19 @@ paths:
       summary: Replace accessibility preferences
       responses:
         "200": { description: Updated preferences }
+  /documents/{documentId}/original:
+    get:
+      summary: Retrieve the authenticated user's original document
+      parameters:
+        - in: path
+          name: documentId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: Decrypted original document }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

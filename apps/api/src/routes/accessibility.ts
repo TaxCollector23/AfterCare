@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { accessibilityPreferences } from "../db/schema.js";
+import { repository } from "../db/repository.js";
 
 const defaults = {
   textSize: "large" as const,
@@ -19,7 +19,7 @@ const preferencesSchema = z.object({
 
 export const accessibilityRouter = Router();
 accessibilityRouter.get("/prefs", (req, res) => {
-  res.json(accessibilityPreferences.get(req.userId) ?? defaults);
+  res.json(repository.getPreferences(req.userId!) ?? defaults);
 });
 accessibilityRouter.post("/prefs", (req, res) => {
   const parsed = preferencesSchema.safeParse(req.body);
@@ -27,6 +27,5 @@ accessibilityRouter.post("/prefs", (req, res) => {
     res.status(400).json({ error: "Invalid accessibility preferences" });
     return;
   }
-  accessibilityPreferences.set(req.userId, parsed.data);
-  res.json(parsed.data);
+  res.json(repository.setPreferences(req.userId!, parsed.data));
 });

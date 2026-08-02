@@ -1,20 +1,20 @@
 import { Router } from "express";
-import { documents, findAppointment } from "../db/schema.js";
+import { repository } from "../db/repository.js";
 
 export const appointmentsRouter = Router();
 
 appointmentsRouter.get("/", (req, res) => {
   const documentId = String(req.query.documentId ?? "");
-  const document = documents.get(documentId);
-  if (!document || document.userId !== req.userId) {
+  const appointments = repository.listAppointments(documentId, req.userId!);
+  if (!appointments) {
     res.status(404).json({ error: "Recovery plan not found" });
     return;
   }
-  res.json({ data: document.plan.appointments, isPlaceholder: document.plan.isPlaceholder });
+  res.json({ data: appointments });
 });
 
 appointmentsRouter.post("/:appointmentId/calendar", (req, res) => {
-  const appointment = findAppointment(req.params.appointmentId, req.userId);
+  const appointment = repository.findAppointment(req.params.appointmentId, req.userId!);
   if (!appointment) {
     res.status(404).json({ error: "Appointment not found" });
     return;
