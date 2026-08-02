@@ -28,6 +28,13 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      # Set by hand in the dashboard, and NOT with Render's "Generate" button —
+      # that produces a random string of the wrong length, and every upload then
+      # fails with "STORAGE_ENCRYPTION_KEY must decode to 32 bytes". It must
+      # decode to exactly 32 bytes; base64, base64url, and 64-char hex all work:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      # Changing it makes already-stored documents unreadable.
+      # /health reports storage.encryption: "misconfigured" when it is wrong.
       - key: STORAGE_ENCRYPTION_KEY
         sync: false
       - key: GOOGLE_STATE_SECRET

@@ -18,13 +18,48 @@ const s3 = config.S3_BUCKET
   : null;
 const memoryObjects = new Map<string, Buffer>();
 
+const KEY_HELP =
+  'generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"';
+
+/**
+ * Decodes a configured key to exactly 32 bytes, accepting any of the encodings
+ * a 32-byte key is usually pasted in. Returns null when the value can't be one.
+ *
+ * base64 decoding never throws — it skips characters outside the alphabet — so
+ * a wrong-length result is the only signal that the value isn't a real key.
+ */
+function decodeKey(value: string): Buffer | null {
+  const trimmed = value.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return Buffer.from(trimmed, "hex");
+  const base64 = Buffer.from(trimmed, "base64");
+  if (base64.length === 32) return base64;
+  const base64url = Buffer.from(trimmed, "base64url");
+  if (base64url.length === 32) return base64url;
+  return null;
+}
+
+/** Whether the process is configured well enough to store an upload. */
+export function encryptionStatus() {
+  if (!config.STORAGE_ENCRYPTION_KEY) {
+    return config.NODE_ENV === "production"
+      ? { configured: false as const, problem: "STORAGE_ENCRYPTION_KEY is not set" }
+      : { configured: true as const, problem: null };
+  }
+  return decodeKey(config.STORAGE_ENCRYPTION_KEY)
+    ? { configured: true as const, problem: null }
+    : {
+        configured: false as const,
+        problem: "STORAGE_ENCRYPTION_KEY must decode to 32 bytes",
+      };
+}
+
 function encryptionKey() {
   if (config.STORAGE_ENCRYPTION_KEY) {
-    const decoded = Buffer.from(config.STORAGE_ENCRYPTION_KEY, "base64");
-    if (decoded.length !== 32) {
+    const decoded = decodeKey(config.STORAGE_ENCRYPTION_KEY);
+    if (!decoded) {
       throw new AppError(
         500,
-        "STORAGE_ENCRYPTION_KEY must decode to 32 bytes",
+        `STORAGE_ENCRYPTION_KEY must decode to 32 bytes — ${KEY_HELP}`,
         "BAD_CONFIG",
       );
     }
@@ -33,7 +68,7 @@ function encryptionKey() {
   if (config.NODE_ENV === "production") {
     throw new AppError(
       500,
-      "Storage encryption is not configured",
+      `Storage encryption is not configured — set STORAGE_ENCRYPTION_KEY. ${KEY_HELP}`,
       "BAD_CONFIG",
     );
   }
@@ -119,9 +154,14 @@ export async function deleteStoredDocument(storageKey: string) {
 }
 
 export function storageStatus() {
+  const encryption = encryptionStatus();
   return {
     configured: Boolean(s3 && config.S3_BUCKET),
     mode: s3 ? "s3" : "memory",
+    // Surfaced here so a bad key is visible from /health. Without it the only
+    // symptom is every upload returning a 500 that nothing else explains.
+    encryption: encryption.configured ? "ok" : "misconfigured",
+    encryptionProblem: encryption.problem,
   } as const;
 }
 
