@@ -1,8 +1,7 @@
 # AfterCare — web app
 
-Turns a patient's own discharge paperwork into a plain-language, read-aloud recovery guide.
-Informational only — it never replaces a care team, and it shows nothing that didn't come
-from a document the patient (or their caregiver) actually provided.
+Turns a patient's own discharge paperwork — a PDF, a photo of a report, or a file from Google
+Drive — into a plain-language, read-aloud recovery guide.
 
 ## Status
 
@@ -13,7 +12,9 @@ exactly what's missing instead of showing fake data.
 - **Firebase** (Auth + Firestore + Storage) — required for sign-in, uploads, and everything
   under `/dashboard`.
 - **Google Drive connector** — optional. Without it, the "Connect from Google Drive" button
-  is disabled with an explanation; direct PDF upload still works.
+  is disabled with an explanation; direct PDF/photo upload still works.
+- **Read-aloud voice** — optional. Without an ElevenLabs or Google Cloud TTS key, "Read this
+  page to me" uses the browser's built-in voice, which needs no setup at all.
 - **apps/api backend** (OCR/extraction/medication/appointment/warning pipeline) — not built yet.
   Until it exists, uploaded documents will sit at "Waiting to process" forever, which is the
   honest state to show rather than inventing data.
@@ -53,6 +54,19 @@ npm run dev
    → put the client ID in `VITE_GOOGLE_DRIVE_CLIENT_ID`.
 3. Credentials → create an **API key**, restrict it to the Picker + Drive APIs → put it in
    `VITE_GOOGLE_DRIVE_API_KEY`.
+
+### Getting a read-aloud voice key (optional)
+
+Leave all three blank to use the browser's built-in voice — it already works with no setup.
+To use a nicer voice instead:
+
+- **ElevenLabs**: https://elevenlabs.io → profile → API key → `VITE_ELEVENLABS_API_KEY`.
+  Optionally set `VITE_ELEVENLABS_VOICE_ID` to a specific voice (defaults to "Rachel").
+- **Google Cloud TTS**: https://console.cloud.google.com → enable **Cloud Text-to-Speech API**
+  → Credentials → API key → `VITE_GOOGLE_TTS_API_KEY`.
+
+If both are set, ElevenLabs is used. If a request to either fails, the read-aloud button shows
+the error instead of silently falling back, so a misconfigured key is easy to spot.
 
 ## Deploying
 

@@ -1,32 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { speak, stopSpeaking } from "../services/tts";
 
 /**
- * Reads the current page's visible text aloud via SpeechSynthesis. Deliberately simple:
- * one button reads everything inside <main>, top to bottom — no per-element click-to-read
- * mode, since AfterCare's header now exposes exactly one control for this feature.
+ * Reads the current page's visible text aloud. Uses whichever TTS provider is
+ * configured (see services/tts.ts) — ElevenLabs or Google Cloud TTS if a key is set,
+ * otherwise the browser's built-in voice. One button, reads everything inside <main>.
  */
 export function useReadAloud(rate = 0.95) {
   const [speaking, setSpeaking] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const stop = useCallback(() => {
-    window.speechSynthesis?.cancel();
+    requestId.current += 1; // invalidate any in-flight speak() loop
+    stopSpeaking();
     setSpeaking(false);
   }, []);
 
-  const readPage = useCallback(() => {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
+  const readPage = useCallback(async () => {
     const main = document.querySelector("main.content");
     const text = (main?.textContent ?? document.body.innerText ?? "").replace(/\s+/g, " ").trim();
     if (!text) return;
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 6000));
-    utterance.rate = rate;
-    utterance.onend = () => setSpeaking(false);
-    utterance.onerror = () => setSpeaking(false);
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+
+    const myRequest = ++requestId.current;
+    setError(null);
     setSpeaking(true);
+    try {
+      await speak(text, rate);
+    } catch (err) {
+      if (myRequest === requestId.current) {
+        setError(err instanceof Error ? err.message : "Couldn't read this page aloud.");
+      }
+    } finally {
+      if (myRequest === requestId.current) setSpeaking(false);
+    }
   }, [rate]);
 
   const toggle = useCallback(() => {
@@ -34,7 +41,7 @@ export function useReadAloud(rate = 0.95) {
     else readPage();
   }, [speaking, readPage, stop]);
 
-  useEffect(() => () => window.speechSynthesis?.cancel(), []);
+  useEffect(() => () => stopSpeaking(), []);
 
-  return { speaking, toggle };
+  return { speaking, error, toggle };
 }

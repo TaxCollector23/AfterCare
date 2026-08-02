@@ -19,7 +19,8 @@ export default function Upload() {
   const { user } = useAuth();
   const { documents } = useDocuments(user?.uid);
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +68,7 @@ export default function Upload() {
     <div>
       <h1>Add your paperwork</h1>
       <p className="gloss measure">
-        Upload a PDF of your discharge summary or your latest doctor's report, or connect it straight from
-        Google Drive. Nothing is shown on your recovery guide until it comes from a document you provide.
+        Upload a PDF, take or upload a photo of your report, or connect it straight from Google Drive.
       </p>
 
       {error && <ErrorBanner message={error} onRetry={() => setError(null)} />}
@@ -119,13 +119,30 @@ export default function Upload() {
           <>
             <i className="ph-duotone ph-upload-simple" style={{ fontSize: 40, color: "var(--color-accent)" }} aria-hidden="true" />
             <p style={{ margin: "12px 0" }}>Drag a PDF here, or</p>
-            <button className="btn btn-solid" onClick={() => inputRef.current?.click()}>
-              Choose a PDF file
-            </button>
+            <div className="flex" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+              <button className="btn btn-solid" onClick={() => fileInputRef.current?.click()}>
+                Choose a PDF file
+              </button>
+              <button className="btn btn-outline" onClick={() => photoInputRef.current?.click()}>
+                <i className="ph-duotone ph-camera" aria-hidden="true" /> Take or upload a photo
+              </button>
+            </div>
             <input
-              ref={inputRef}
+              ref={fileInputRef}
               type="file"
               accept="application/pdf"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+                e.target.value = "";
+              }}
+            />
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
               hidden
               onChange={(e) => {
                 const file = e.target.files?.[0];

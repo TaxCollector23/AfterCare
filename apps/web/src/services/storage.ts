@@ -3,27 +3,27 @@ import { storage } from "../firebase";
 
 export class UnsupportedFileError extends Error {
   constructor() {
-    super("Please upload a PDF file. Scanned images saved as PDF also work.");
+    super("Please upload a PDF or a photo (JPG, PNG, or HEIC).");
     this.name = "UnsupportedFileError";
   }
 }
 
 export class FileTooLargeError extends Error {
   constructor() {
-    super("That file is larger than 20MB. Try a smaller scan or a fewer-page PDF.");
+    super("That file is larger than 20MB. Try a smaller scan, fewer pages, or a lower-resolution photo.");
     this.name = "FileTooLargeError";
   }
 }
 
 const MAX_BYTES = 20 * 1024 * 1024;
+const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png", "image/heic", "image/heif", "image/webp"];
+const ACCEPTED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"];
 
 export function validateFile(file: File): void {
-  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-    throw new UnsupportedFileError();
-  }
-  if (file.size > MAX_BYTES) {
-    throw new FileTooLargeError();
-  }
+  const nameLower = file.name.toLowerCase();
+  const typeOk = ACCEPTED_TYPES.includes(file.type) || ACCEPTED_EXTENSIONS.some((ext) => nameLower.endsWith(ext));
+  if (!typeOk) throw new UnsupportedFileError();
+  if (file.size > MAX_BYTES) throw new FileTooLargeError();
 }
 
 /** Uploads a discharge document to Firebase Storage under the user's own folder. */
@@ -35,7 +35,7 @@ export function uploadDischargeFile(
   validateFile(file);
   const storagePath = `users/${uid}/documents/${Date.now()}-${file.name}`;
   const task = uploadBytesResumable(ref(storage, storagePath), file, {
-    contentType: file.type || "application/pdf",
+    contentType: file.type || "application/octet-stream",
   });
 
   const promise = new Promise<{ storagePath: string; downloadUrl: string }>((resolve, reject) => {
