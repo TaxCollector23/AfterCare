@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// Uploaded discharge documents live at users/{uid}/documents/... (see src/services/storage.ts).
+// Only the owning user may read or write their own files. Deploy with:
+//   firebase deploy --only storage
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/documents/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

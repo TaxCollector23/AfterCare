@@ -1,0 +1,10 @@
+{
+  "name": "AfterCare — Your Discharge Paperwork, Explained",
+  "short_name": "AfterCare",
+  "description": "Turns your own discharge paperwork into a plain-language, read-aloud recovery guide. Informational only.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f3f2f2",
+  "theme_color": "#f3f2f2",
+  "icons": []
+}
