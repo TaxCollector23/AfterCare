@@ -171,7 +171,11 @@ export async function callJson<T = unknown>(opts: JsonCallOptions): Promise<T> {
   if (getGemini(1)) attempts.push({ name: 'gemini-2', run: () => geminiJson(1, fullSystem, user, maxRetries) });
 
   const raw = await runWaterfall(attempts);
-  return JSON.parse(stripCodeFence(raw)) as T;
+  try {
+    return JSON.parse(stripCodeFence(raw)) as T;
+  } catch (err) {
+    throw new Error(`Failed to parse model response as JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +200,7 @@ async function openaiVision(buffer: Buffer, mimeType: string): Promise<string> {
       ],
     });
     const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('Vision transcription returned an empty response');
+    if (!content || typeof content !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
     return content;
   });
 }
@@ -211,7 +215,7 @@ async function geminiVision(tier: 0 | 1, buffer: Buffer, mimeType: string): Prom
       { inlineData: { mimeType, data: buffer.toString('base64') } },
     ]);
     const text = result.response.text();
-    if (!text) throw new Error('Vision transcription returned an empty response');
+    if (!text || typeof text !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
     return text;
   });
 }
