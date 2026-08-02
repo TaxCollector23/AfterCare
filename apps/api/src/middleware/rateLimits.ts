@@ -28,3 +28,21 @@ export const uploadRateLimit = rateLimit({
     code: "UPLOAD_RATE_LIMITED",
   },
 });
+
+/**
+ * Stricter per-user budget for /ask (real LLM calls). Factory form lets the
+ * test suite build a low-limit instance without touching global config.
+ */
+export function createAskRateLimit(limit = config.ASK_RATE_LIMIT) {
+  return rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit,
+    keyGenerator: key,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+      error: "Ask rate limit exceeded. Try again later.",
+      code: "ASK_RATE_LIMITED",
+    },
+  });
+}

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetProviderCooldowns } from "../../src/integrations/aiProviderWaterfall.js";
 
 const { openaiCreateMock, geminiGenerateContentMock, geminiModels } =
   vi.hoisted(() => ({
@@ -47,6 +48,7 @@ beforeEach(() => {
   // place, so an unconsumed queue from a failing test leaks into the next one.
   vi.resetAllMocks();
   geminiModels.length = 0;
+  resetProviderCooldowns();
   for (const key of ENV_KEYS) delete process.env[key];
 });
 

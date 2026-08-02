@@ -17,6 +17,11 @@ import OpenAI from "openai";
 const RECOGNIZED = [
   { env: "OPENAI_API_KEY", label: "openai", family: "openai" as const },
   {
+    env: "OPENROUTER_API_KEY",
+    label: "openrouter",
+    family: "openrouter" as const,
+  },
+  {
     env: "GEMINI_API_KEY_PRIMARY",
     label: "gemini-primary",
     family: "gemini" as const,
@@ -29,6 +34,8 @@ const RECOGNIZED = [
 ];
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+const OPENROUTER_MODEL =
+  process.env.OPENROUTER_MODEL ?? "deepseek/deepseek-chat-v3-0324:free";
 const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 interface Probe {
@@ -46,6 +53,25 @@ async function probeOpenAi(apiKey: string): Promise<string> {
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: "Reply with JSON." },
+      { role: "user", content: 'Return {"ok":true}' },
+    ],
+  });
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error("empty response");
+  return content;
+}
+
+async function probeOpenRouter(apiKey: string): Promise<string> {
+  // OpenRouter is OpenAI-compatible, but `:free` models don't all support
+  // `response_format`, so shape the reply with the prompt like the adapters do.
+  const client = new OpenAI({
+    apiKey,
+    baseURL: "https://openrouter.ai/api/v1",
+  });
+  const response = await client.chat.completions.create({
+    model: OPENROUTER_MODEL,
+    messages: [
+      { role: "system", content: "Reply with JSON only." },
       { role: "user", content: 'Return {"ok":true}' },
     ],
   });
@@ -100,7 +126,7 @@ async function main() {
       `\n! Ignored — these look like API keys but are not names this API reads:\n` +
         strays.map((name) => `    ${name}`).join("\n") +
         `\n  Rename to one of: ${RECOGNIZED.map((r) => r.env).join(", ")}\n` +
-        `  (OpenRouter keys are not supported — this API speaks to OpenAI and Gemini only.)\n`,
+        `  (Anthropic/Claude keys are not supported — the waterfall speaks to OpenAI, OpenRouter, and Gemini.)\n`,
     );
   }
 
@@ -121,13 +147,20 @@ async function main() {
   const results: Probe[] = await Promise.all(
     configured.map(async ({ env, label, family }): Promise<Probe> => {
       const apiKey = process.env[env]!.trim();
-      const model = family === "openai" ? OPENAI_MODEL : GEMINI_MODEL;
+      const model =
+        family === "openai"
+          ? OPENAI_MODEL
+          : family === "openrouter"
+            ? OPENROUTER_MODEL
+            : GEMINI_MODEL;
       const startedAt = Date.now();
       try {
         const raw =
           family === "openai"
             ? await probeOpenAi(apiKey)
-            : await probeGemini(apiKey);
+            : family === "openrouter"
+              ? await probeOpenRouter(apiKey)
+              : await probeGemini(apiKey);
         JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ""));
         return { label, model, ok: true, ms: Date.now() - startedAt };
       } catch (error) {

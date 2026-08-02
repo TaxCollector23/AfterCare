@@ -747,4 +747,94 @@ describe("DischargeGuide API", () => {
       .set("authorization", `Bearer ${otherToken}`)
       .expect(404);
   });
+
+  it("rate limits /ask separately from the general API limit", async () => {
+    const limitedApp = createApp({ askRateLimit: 2 });
+
+    const created = await request(limitedApp)
+      .post("/auth/register")
+      .send({
+        email: "asklimit@example.com",
+        password: "a-safe-password-123",
+      })
+      .expect(201);
+    const token = created.body.accessToken as string;
+    const user = repository.findUserByEmail("asklimit@example.com")!;
+    const documentId = "00000000-0000-4000-8000-000000000098";
+    repository.createDocument({
+      id: documentId,
+      userId: user.id,
+      filename: "instructions.pdf",
+      mimeType: "application/pdf",
+      fileHash: "ask-limit-hash",
+      storageKey: "ask-limit-key",
+      uploadedAt: new Date().toISOString(),
+      status: "ready",
+    });
+
+    const body = { documentId, question: "How often?" };
+    await request(limitedApp)
+      .post("/ask")
+      .set("authorization", `Bearer ${token}`)
+      .send(body)
+      .expect(200);
+    await request(limitedApp)
+      .post("/ask")
+      .set("authorization", `Bearer ${token}`)
+      .send(body)
+      .expect(200);
+    const limited = await request(limitedApp)
+      .post("/ask")
+      .set("authorization", `Bearer ${token}`)
+      .send(body)
+      .expect(429);
+    expect(limited.body.code).toBe("ASK_RATE_LIMITED");
+  });
+
+  it("keys /ask rate limits per user, not per IP", async () => {
+    // Both users share one IP (supertest); only user A exhausts the budget.
+    const limitedApp = createApp({ askRateLimit: 2 });
+    const tokenA = await register("ask-user-a@example.com");
+    const tokenB = await register("ask-user-b@example.com");
+    const userA = repository.findUserByEmail("ask-user-a@example.com")!;
+    const userB = repository.findUserByEmail("ask-user-b@example.com")!;
+    const documentIdA = "00000000-0000-4000-8000-000000000098";
+    const documentIdB = "00000000-0000-4000-8000-000000000099";
+    repository.createDocument({
+      id: documentIdA,
+      userId: userA.id,
+      filename: "instructions.pdf",
+      mimeType: "application/pdf",
+      fileHash: "ask-key-a-hash",
+      storageKey: "ask-key-a",
+      uploadedAt: new Date().toISOString(),
+      status: "ready",
+    });
+    repository.createDocument({
+      id: documentIdB,
+      userId: userB.id,
+      filename: "instructions.pdf",
+      mimeType: "application/pdf",
+      fileHash: "ask-key-b-hash",
+      storageKey: "ask-key-b",
+      uploadedAt: new Date().toISOString(),
+      status: "ready",
+    });
+
+    const askA = () =>
+      request(limitedApp)
+        .post("/ask")
+        .set("authorization", `Bearer ${tokenA}`)
+        .send({ documentId: documentIdA, question: "How often?" });
+    const askB = () =>
+      request(limitedApp)
+        .post("/ask")
+        .set("authorization", `Bearer ${tokenB}`)
+        .send({ documentId: documentIdB, question: "How often?" });
+
+    await askA().expect(200);
+    await askA().expect(200);
+    await askA().expect(429); // user A exhausted its own budget
+    await askB().expect(200); // user B is unaffected despite the shared IP
+  });
 });
