@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
 import { AccessibilityProvider } from "./hooks/useAccessibility";
 import { ReadAloudButton } from "./components/ReadAloudButton";
-import { SafetyBanner } from "./components/SafetyBanner";
 import { BottomNav } from "./components/BottomNav/BottomNav";
 
 import Landing from "./screens/Landing/Landing";
@@ -70,7 +69,6 @@ export default function App() {
         </header>
 
         <main className="content" id="main-content">
-          <SafetyBanner />
           <AppRoutes />
         </main>
 

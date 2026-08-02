@@ -10,6 +10,9 @@ interface ImportMetaEnv {
   readonly VITE_GOOGLE_DRIVE_CLIENT_ID?: string;
   readonly VITE_GOOGLE_DRIVE_API_KEY?: string;
   readonly VITE_API_BASE_URL?: string;
+  readonly VITE_ELEVENLABS_API_KEY?: string;
+  readonly VITE_ELEVENLABS_VOICE_ID?: string;
+  readonly VITE_GOOGLE_TTS_API_KEY?: string;
 }
 
 interface ImportMeta {
