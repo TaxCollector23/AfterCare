@@ -5,4 +5,9 @@ packages:
 onlyBuiltDependencies:
   - esbuild
 allowBuilds:
+  "@firebase/util": true
   esbuild: true
+  protobufjs: true
+
+minimumReleaseAgeExclude:
+  - baseline-browser-mapping@2.11.11

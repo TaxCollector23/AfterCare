@@ -16,7 +16,7 @@ const success = { value: "grounded result" };
 
 describe("AI provider waterfall", () => {
   it("stops after OpenAI succeeds", async () => {
-    const operation = vi.fn(async () => success);
+    const operation = vi.fn(async (_context: AiProviderContext) => success);
 
     await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
       success,
@@ -58,7 +58,7 @@ describe("AI provider waterfall", () => {
   });
 
   it("returns a safe unavailable result after all providers fail", async () => {
-    const operation = vi.fn(async () => {
+    const operation = vi.fn(async (_context: AiProviderContext) => {
       throw new AiProviderFailure("network", "raw provider network failure");
     });
 
@@ -73,7 +73,7 @@ describe("AI provider waterfall", () => {
   });
 
   it("skips missing OpenAI credentials and starts with Gemini primary", async () => {
-    const operation = vi.fn(async () => success);
+    const operation = vi.fn(async (_context: AiProviderContext) => success);
 
     await runAiProviderWaterfall(operation, {
       geminiPrimary: credentials.geminiPrimary,

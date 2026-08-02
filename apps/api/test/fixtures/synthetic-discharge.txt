@@ -1,0 +1,22 @@
+SYNTHETIC TEST RECORD — NOT A REAL PATIENT
+
+Patient: Avery Example
+Date of birth: January 1, 1970
+Discharge date: August 2, 2026
+
+Medication instructions:
+- Amoxicillin 500 mg: take one capsule by mouth twice daily for 7 days.
+- Acetaminophen 500 mg: take one tablet every 6 hours as needed for pain. Do not exceed the limit printed on the medication label.
+
+Follow-up appointment:
+- Primary care follow-up on August 10, 2026 at 10:30 AM.
+- Location: Example Community Clinic, 100 Test Avenue.
+
+Activity and care instructions:
+- Keep the dressing clean and dry.
+- Walk for a few minutes several times each day as tolerated.
+- Do not drive while taking medication that causes drowsiness.
+
+Get urgent help for trouble breathing, severe chest pain, fainting, or rapidly worsening symptoms.
+
+END SYNTHETIC TEST RECORD
