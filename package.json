@@ -1,0 +1,11 @@
+{
+  "name": "discharge-guide",
+  "private": true,
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "pnpm --filter @discharge-guide/api dev",
+    "build": "pnpm --filter @discharge-guide/api... build",
+    "test": "pnpm --filter @discharge-guide/api test",
+    "typecheck": "pnpm --filter @discharge-guide/api... typecheck"
+  }
+}
