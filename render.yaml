@@ -17,7 +17,7 @@ services:
       # request from the real site. This is the production domain; preview
       # deployments are served from generated subdomains and will be refused.
       - key: WEB_ORIGIN
-        value: https://marinhackstigermygoat.vercel.app
+        value: https://aftercare-web-eta.vercel.app
       - key: API_RATE_LIMIT
         value: "500"
       - key: UPLOAD_RATE_LIMIT

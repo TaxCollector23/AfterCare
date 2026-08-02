@@ -3,5 +3,7 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @dischargeguide/web build",
   "outputDirectory": "apps/web/dist",
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/:path((?!api(?:/|$)).*)", "destination": "/index.html" }
+  ]
 }
