@@ -3,6 +3,8 @@ import { repository } from "../db/repository.js";
 
 export const appointmentsRouter = Router();
 
+const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 appointmentsRouter.get("/", (req, res) => {
   const documentId = String(req.query.documentId ?? "");
   const appointments = repository.listAppointments(documentId, req.userId!);
@@ -20,6 +22,13 @@ appointmentsRouter.post("/:appointmentId/calendar", (req, res) => {
   );
   if (!appointment) {
     res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+  if (!ISO_DATETIME.test(appointment.date)) {
+    res.status(422).json({
+      error:
+        "This appointment doesn't have a concrete date to add to a calendar.",
+    });
     return;
   }
 

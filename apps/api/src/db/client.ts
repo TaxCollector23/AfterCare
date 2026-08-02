@@ -19,3 +19,8 @@ export function databaseStatus() {
     mode: pool ? "postgres" : "memory",
   } as const;
 }
+
+/** Closes the Postgres pool. Call on graceful shutdown; safe to call even if never configured. */
+export async function closeDatabase(): Promise<void> {
+  if (pool) await pool.end();
+}

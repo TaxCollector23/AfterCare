@@ -310,6 +310,52 @@ describe("DischargeGuide API", () => {
     expect(calendar.text).toContain("SUMMARY:Cardiology appointment");
   });
 
+  it("rejects calendar export for an appointment without a concrete date", async () => {
+    const token = await register();
+    const user = repository.findUserByEmail("patient@example.com")!;
+    const documentId = "00000000-0000-4000-8000-000000000005";
+    const appointmentId = "00000000-0000-4000-8000-000000000006";
+    repository.createDocument({
+      id: documentId,
+      userId: user.id,
+      filename: "instructions.pdf",
+      mimeType: "application/pdf",
+      fileHash: "plan-hash-2",
+      storageKey: "plan-key-2",
+      uploadedAt: new Date().toISOString(),
+      status: "processing",
+    });
+    repository.savePlan(documentId, {
+      documentId,
+      status: "ready",
+      disclaimer:
+        "This app explains instructions; it never replaces medical advice.",
+      isPlaceholder: false,
+      warnings: [],
+      timeline: [],
+      medications: [],
+      appointments: [
+        {
+          id: appointmentId,
+          // Free text ? the AI couldn't resolve a concrete calendar date.
+          date: "in 2 weeks",
+          doctor: "Dr. Source",
+          specialty: "Cardiology",
+          location: "Clinic",
+          notes: "",
+          confidence: 60,
+          sourceLines: [8],
+        },
+      ],
+    });
+
+    const calendar = await request(app)
+      .post(`/appointments/${appointmentId}/calendar`)
+      .set("authorization", `Bearer ${token}`)
+      .expect(422);
+    expect(calendar.body.error).toMatch(/concrete date/);
+  });
+
   it("rejects unsupported uploads", async () => {
     const token = await register();
     await request(app)

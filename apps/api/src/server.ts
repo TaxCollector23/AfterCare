@@ -1,18 +1,18 @@
 import { closeCache } from "./cache/index.js";
-import { config } from "./config.js";
-import { pool } from "./db/client.js";
 import { createApp } from "./app.js";
+import { config } from "./config.js";
+import { closeDatabase } from "./db/client.js";
 
 const server = createApp().listen(config.PORT);
 
-async function shutdown(_signal: string) {
+function shutdown() {
   server.close(async () => {
-    await closeCache();
-    if (pool) await pool.end();
+    await Promise.allSettled([closeDatabase(), closeCache()]);
     process.exit(0);
   });
+  // Force-exit if in-flight requests never drain (e.g. a stuck upstream call).
   setTimeout(() => process.exit(1), 10_000).unref();
 }
 
-process.on("SIGTERM", () => void shutdown("SIGTERM"));
-process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
