@@ -1,0 +1,41 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "AfterCare",
+  "description": "Understand your own discharge paperwork.",
+  "colors": {
+    "primary": "#0E7C86",
+    "light": "#3BB3BD",
+    "dark": "#0A5A61"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Overview",
+        "pages": ["docs/index", "docs/architecture"]
+      },
+      {
+        "group": "API reference",
+        "openapi": "docs/api-openapi.yaml"
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/VedChiFrendoflake/AfterCare"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Open AfterCare",
+      "href": "https://aftercare-web-eta.vercel.app"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/VedChiFrendoflake/AfterCare"
+    }
+  }
+}
