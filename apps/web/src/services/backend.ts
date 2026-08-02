@@ -133,9 +133,21 @@ export interface ProcessEvent {
   error?: { code: string; message: string; retryable: boolean };
 }
 
+/** Reconnect backoff after a stream ends without saying how it ended. */
+const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
+
 /**
  * Streams pipeline progress. Calls `onEvent` per stage, then exactly one of
  * `onComplete` / `onFailed`. Returns an abort function.
+ *
+ * The stream can end without a terminal event — the Vercel proxy caps how long
+ * it will hold a streamed response, and the free API instance can restart
+ * mid-pipeline. Both look identical here: `read()` reports `done` having sent
+ * neither `complete` nor `failed`. Treating that as "nothing happened" is what
+ * left the Processing screen saying "Reading your document" indefinitely, so a
+ * silent end reconnects instead. Re-attaching is safe and cheap: GET /process
+ * replays the stage history and answers immediately when the document already
+ * finished. Once the retries are spent we report a failure rather than hang.
  */
 export function streamProcess(
   documentId: string,
@@ -145,69 +157,97 @@ export function streamProcess(
     onFailed?: (message: string) => void;
   }
 ): () => void {
-  const controller = new AbortController();
+  let cancelled = false;
+  let controller = new AbortController();
+
+  /** Reads one connection. Resolves true when a terminal event arrived. */
+  async function readStream(): Promise<boolean> {
+    const res = await authedFetch(`/process/${documentId}`, {
+      signal: controller.signal,
+      headers: { Accept: "text/event-stream" },
+    });
+    if (!res.ok || !res.body) {
+      handlers.onFailed?.(await readError(res));
+      return true;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return false;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE frames are separated by a blank line.
+      let split: number;
+      while ((split = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, split);
+        buffer = buffer.slice(split + 2);
+
+        let eventName = "message";
+        const dataLines: string[] = [];
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) eventName = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          // lines starting with ":" are heartbeats — ignored
+        }
+        if (dataLines.length === 0) continue;
+
+        let payload: unknown = null;
+        try {
+          payload = JSON.parse(dataLines.join("\n"));
+        } catch {
+          continue;
+        }
+
+        if (eventName === "complete") {
+          handlers.onComplete?.(payload as RecoveryPlan);
+          return true;
+        }
+        if (eventName === "failed") {
+          const err = payload as { message?: string };
+          handlers.onFailed?.(err.message ?? "Processing failed.");
+          return true;
+        }
+        handlers.onEvent?.({ stage: eventName, ...(payload as object) });
+      }
+    }
+  }
 
   (async () => {
-    try {
-      const res = await authedFetch(`/process/${documentId}`, {
-        signal: controller.signal,
-        headers: { Accept: "text/event-stream" },
-      });
-      if (!res.ok || !res.body) {
-        handlers.onFailed?.(await readError(res));
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // SSE frames are separated by a blank line.
-        let split: number;
-        while ((split = buffer.indexOf("\n\n")) !== -1) {
-          const frame = buffer.slice(0, split);
-          buffer = buffer.slice(split + 2);
-
-          let eventName = "message";
-          const dataLines: string[] = [];
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event:")) eventName = line.slice(6).trim();
-            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-            // lines starting with ":" are heartbeats — ignored
-          }
-          if (dataLines.length === 0) continue;
-
-          let payload: unknown = null;
-          try {
-            payload = JSON.parse(dataLines.join("\n"));
-          } catch {
-            continue;
-          }
-
-          if (eventName === "complete") {
-            handlers.onComplete?.(payload as RecoveryPlan);
-            return;
-          }
-          if (eventName === "failed") {
-            const err = payload as { message?: string };
-            handlers.onFailed?.(err.message ?? "Processing failed.");
-            return;
-          }
-          handlers.onEvent?.({ stage: eventName, ...(payload as object) });
+    for (let attempt = 0; !cancelled; attempt += 1) {
+      try {
+        if (await readStream()) return;
+      } catch (err) {
+        if (cancelled || (err as Error)?.name === "AbortError") return;
+        // An expired session will never recover by retrying.
+        if (err instanceof SessionExpiredError) {
+          handlers.onFailed?.(err.message);
+          return;
         }
       }
-    } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
-      handlers.onFailed?.(err instanceof Error ? err.message : "Lost connection while processing.");
+      if (cancelled) return;
+      if (attempt >= RECONNECT_DELAYS_MS.length) {
+        handlers.onFailed?.(
+          "We lost the connection while reading your document. It may still be processing — reopen it in a moment to check."
+        );
+        return;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, RECONNECT_DELAYS_MS[attempt])
+      );
+      if (cancelled) return;
+      // A fresh controller: the previous one may already have been aborted.
+      controller = new AbortController();
     }
   })();
 
-  return () => controller.abort();
+  return () => {
+    cancelled = true;
+    controller.abort();
+  };
 }
 
 /* --------------------------- plan + actions -------------------------- */

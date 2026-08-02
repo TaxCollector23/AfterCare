@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useDocuments } from "../../hooks/useDocuments";
@@ -24,6 +24,15 @@ export default function Processing() {
   useEffect(() => {
     if (doc?.status === "ready") navigate("/dashboard", { replace: true });
   }, [doc?.status, navigate]);
+
+  // An unchanging spinner reads as "stuck". After a while, say why it might be
+  // slow and offer a way off the page rather than leaving people to guess.
+  const [waitedLong, setWaitedLong] = useState(false);
+  useEffect(() => {
+    setWaitedLong(false);
+    const timer = setTimeout(() => setWaitedLong(true), 45_000);
+    return () => clearTimeout(timer);
+  }, [documentId]);
 
   if (loading) {
     return (
@@ -87,7 +96,24 @@ export default function Processing() {
         <p style={{ marginTop: 16 }}>
           Going through your paperwork and organising what it says. This usually takes under a minute.
         </p>
+        {waitedLong && (
+          <p className="gloss measure" style={{ margin: "12px auto 0" }}>
+            This one is taking longer than usual — a sleeping server can add a minute
+            to the first document of the day. You can safely leave this page; your
+            guide will be here when it finishes.
+          </p>
+        )}
       </div>
+      {waitedLong && (
+        <div className="flex" style={{ marginTop: "var(--sp4)", flexWrap: "wrap" }}>
+          <Link to="/dashboard" className="btn btn-outline">
+            Go to my guide
+          </Link>
+          <Link to="/upload" className="btn btn-outline">
+            Add a different document
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

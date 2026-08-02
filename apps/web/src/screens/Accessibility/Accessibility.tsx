@@ -14,34 +14,46 @@ export default function Accessibility() {
       <p className="gloss measure">Make AfterCare comfortable for you. These settings are saved on this device.</p>
 
       <div className="card">
-        <Row label="Text size">
-          <div className="flex">
-            {(["normal", "large", "largest"] as const).map((v) => (
-              <button key={v} className={`chip ${a11y.textScale === v ? "active" : ""}`} onClick={() => a11y.update({ textScale: v })}>
-                {v === "normal" ? "A" : v === "large" ? "A+" : "A++"}
+        <Row label="Text size" htmlFor="text-size">
+          {/* "A"/"A+"/"A++" is meaningless to a screen reader, and without a
+              group the three buttons are read as unrelated controls. */}
+          <div className="flex" role="group" aria-label="Text size" id="text-size">
+            {TEXT_SCALES.map(({ value, glyph, name }) => (
+              <button
+                key={value}
+                className={`chip ${a11y.textScale === value ? "active" : ""}`}
+                aria-label={name}
+                aria-pressed={a11y.textScale === value}
+                onClick={() => a11y.update({ textScale: value })}
+              >
+                <span aria-hidden="true">{glyph}</span>
               </button>
             ))}
           </div>
         </Row>
         <Row label="High contrast">
-          <Toggle on={a11y.contrast} onClick={() => a11y.update({ contrast: !a11y.contrast })} />
+          <Toggle label="High contrast" on={a11y.contrast} onClick={() => a11y.update({ contrast: !a11y.contrast })} />
         </Row>
         <Row label="Dark mode">
-          <Toggle on={a11y.darkMode} onClick={() => a11y.update({ darkMode: !a11y.darkMode })} />
+          <Toggle label="Dark mode" on={a11y.darkMode} onClick={() => a11y.update({ darkMode: !a11y.darkMode })} />
         </Row>
         <Row label="Reduce motion">
-          <Toggle on={a11y.reduceMotion} onClick={() => a11y.update({ reduceMotion: !a11y.reduceMotion })} />
+          <Toggle label="Reduce motion" on={a11y.reduceMotion} onClick={() => a11y.update({ reduceMotion: !a11y.reduceMotion })} />
         </Row>
         <Row label="Dyslexia-friendly font">
-          <Toggle on={a11y.dyslexiaFont} onClick={() => a11y.update({ dyslexiaFont: !a11y.dyslexiaFont })} />
+          <Toggle label="Dyslexia-friendly font" on={a11y.dyslexiaFont} onClick={() => a11y.update({ dyslexiaFont: !a11y.dyslexiaFont })} />
         </Row>
-        <Row label="Read-aloud speed">
+        <Row label="Read-aloud speed" htmlFor="read-aloud-rate">
           <input
+            id="read-aloud-rate"
             type="range"
             min={0.6}
             max={1.4}
             step={0.05}
             value={a11y.readAloudRate}
+            // A bare slider announces only a number; say what the number means.
+            aria-label="Read-aloud speed"
+            aria-valuetext={`${a11y.readAloudRate.toFixed(2)} times normal speed`}
             onChange={(e) => a11y.update({ readAloudRate: Number(e.target.value) })}
           />
         </Row>
@@ -64,18 +76,38 @@ export default function Accessibility() {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+const TEXT_SCALES = [
+  { value: "normal", glyph: "A", name: "Normal text size" },
+  { value: "large", glyph: "A+", name: "Large text size" },
+  { value: "largest", glyph: "A++", name: "Largest text size" },
+] as const;
+
+function Row({
+  label,
+  htmlFor,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="row-between" style={{ padding: "12px 0", borderBottom: "1px solid var(--color-divider)" }}>
-      <span>{label}</span>
+      {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : <span>{label}</span>}
       {children}
     </div>
   );
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+/** On/Off chip. The visible text alone doesn't say what is being toggled. */
+function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
   return (
-    <button className={`chip ${on ? "active" : ""}`} onClick={onClick} aria-pressed={on}>
+    <button
+      className={`chip ${on ? "active" : ""}`}
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={label}
+    >
       {on ? "On" : "Off"}
     </button>
   );
