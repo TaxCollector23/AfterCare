@@ -7,9 +7,10 @@
  * dose of antibiotics" or "follow-up in 2 weeks" on the same timeline.
  */
 import { callJson } from "../integrations/openai.js";
+import { fallbackConfidence, fallbackTimeline } from "./heuristicFallback.js";
 import {
   ok,
-  fail,
+  degradedOk,
   type Appointment,
   type Medication,
   type OcrResult,
@@ -109,9 +110,12 @@ export async function buildTimeline(
       overall,
       result.flatMap((t) => t.sourceLines),
     );
-  } catch (err) {
-    return fail(
-      err instanceof Error ? err.message : "Timeline building failed",
+  } catch {
+    const fallback = fallbackTimeline(timelineText, context, fullOcr);
+    return degradedOk(
+      fallback,
+      fallbackConfidence(fallback),
+      fallback.flatMap((entry) => entry.sourceLines),
     );
   }
 }

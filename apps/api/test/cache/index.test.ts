@@ -63,6 +63,21 @@ describe("cacheExtraction / cacheExplanations", () => {
     expect(compute).toHaveBeenCalledTimes(2);
   });
 
+  it("does NOT cache a degraded fallback StageResult", async () => {
+    const compute = vi.fn(async () => ({
+      success: true,
+      data: "fallback",
+      confidence: 65,
+      sourceLines: [1],
+      degraded: true,
+    }));
+
+    await cacheExtraction("hash-degraded", compute);
+    await cacheExtraction("hash-degraded", compute);
+
+    expect(compute).toHaveBeenCalledTimes(2);
+  });
+
   it("same failure-is-not-cached behavior applies to explanations", async () => {
     const compute = vi.fn(async () => ({
       success: false,

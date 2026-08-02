@@ -8,7 +8,17 @@
  * of the document.
  */
 import { callJson } from "../integrations/openai.js";
-import { ok, fail, type OcrResult, type StageResult } from "./types.js";
+import {
+  fallbackExtractedSections,
+  FALLBACK_CONFIDENCE,
+} from "./heuristicFallback.js";
+import {
+  ok,
+  fail,
+  degradedOk,
+  type OcrResult,
+  type StageResult,
+} from "./types.js";
 
 export interface ExtractedSections {
   medicationsText: string;
@@ -90,7 +100,12 @@ export async function runExtraction(
       90,
       ocr.lines.map((l) => l.line),
     );
-  } catch (err) {
-    return fail(err instanceof Error ? err.message : "Extraction failed");
+  } catch {
+    const sections = fallbackExtractedSections(ocr);
+    return degradedOk(
+      sections,
+      FALLBACK_CONFIDENCE,
+      ocr.lines.map((l) => l.line),
+    );
   }
 }

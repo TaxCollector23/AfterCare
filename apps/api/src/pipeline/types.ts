@@ -5,6 +5,7 @@ export interface StageResult<T> {
   confidence: number;
   error?: string;
   sourceLines: number[];
+  degraded?: boolean;
 }
 
 export const CONFIDENCE_THRESHOLD = 80;
@@ -15,6 +16,14 @@ export function ok<T>(
   sourceLines: number[] = [],
 ): StageResult<T> {
   return { success: true, data, confidence, sourceLines };
+}
+
+export function degradedOk<T>(
+  data: T,
+  confidence: number,
+  sourceLines: number[] = [],
+): StageResult<T> {
+  return { success: true, data, confidence, sourceLines, degraded: true };
 }
 
 export function fail<T>(error: string): StageResult<T> {

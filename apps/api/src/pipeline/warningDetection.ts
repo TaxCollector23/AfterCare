@@ -4,9 +4,10 @@
  * worse failure mode than a redundant one.
  */
 import { callJson } from "../integrations/openai.js";
+import { fallbackConfidence, fallbackWarnings } from "./heuristicFallback.js";
 import {
   ok,
-  fail,
+  degradedOk,
   type OcrResult,
   type Warning,
   type StageResult,
@@ -84,9 +85,12 @@ export async function detectWarnings(
       overall,
       result.flatMap((w) => w.sourceLines),
     );
-  } catch (err) {
-    return fail(
-      err instanceof Error ? err.message : "Warning detection failed",
+  } catch {
+    const fallback = fallbackWarnings(warningsText, fullOcr);
+    return degradedOk(
+      fallback,
+      fallbackConfidence(fallback),
+      fallback.flatMap((warning) => warning.sourceLines),
     );
   }
 }

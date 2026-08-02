@@ -3,8 +3,12 @@
  */
 import { callJson } from "../integrations/openai.js";
 import {
+  fallbackAppointments,
+  fallbackConfidence,
+} from "./heuristicFallback.js";
+import {
   ok,
-  fail,
+  degradedOk,
   type Appointment,
   type OcrResult,
   type StageResult,
@@ -90,9 +94,12 @@ export async function detectAppointments(
       overall,
       result.flatMap((a) => a.sourceLines),
     );
-  } catch (err) {
-    return fail(
-      err instanceof Error ? err.message : "Appointment detection failed",
+  } catch {
+    const fallback = fallbackAppointments(appointmentsText, fullOcr);
+    return degradedOk(
+      fallback,
+      fallbackConfidence(fallback),
+      fallback.flatMap((appointment) => appointment.sourceLines),
     );
   }
 }

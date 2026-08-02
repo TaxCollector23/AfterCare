@@ -18,26 +18,66 @@ const s3 = config.S3_BUCKET
   : null;
 const memoryObjects = new Map<string, Buffer>();
 
-function encryptionKey() {
-  if (config.STORAGE_ENCRYPTION_KEY) {
-    const decoded = Buffer.from(config.STORAGE_ENCRYPTION_KEY, "base64");
-    if (decoded.length !== 32) {
-      throw new AppError(
-        500,
-        "STORAGE_ENCRYPTION_KEY must decode to 32 bytes",
-        "BAD_CONFIG",
-      );
-    }
-    return decoded;
+function tryDecodeKey(
+  value: string,
+  encoding: "base64" | "base64url",
+): Buffer | null {
+  const pattern =
+    encoding === "base64" ? /^[A-Za-z0-9+/]+={0,2}$/ : /^[A-Za-z0-9_-]+={0,2}$/;
+  if (!pattern.test(value) || value.length % 4 === 1) return null;
+  const decoded = Buffer.from(value, encoding);
+  return decoded.length === 32 ? decoded : null;
+}
+
+export function deriveStorageEncryptionKey(value: string): Buffer {
+  const trimmed = value.trim();
+  const decoded =
+    tryDecodeKey(trimmed, "base64") ?? tryDecodeKey(trimmed, "base64url");
+  if (decoded) return decoded;
+
+  if (/^[a-f0-9]{64}$/i.test(trimmed)) {
+    return Buffer.from(trimmed, "hex");
   }
-  if (config.NODE_ENV === "production") {
+
+  if (Buffer.byteLength(trimmed, "utf8") >= 32) {
+    return createHash("sha256").update(trimmed).digest();
+  }
+
+  throw new AppError(
+    500,
+    "STORAGE_ENCRYPTION_KEY must be a 32-byte base64/base64url key, a 64-character hex key, or a 32+ byte raw secret",
+    "BAD_CONFIG",
+  );
+}
+
+function hasConfiguredStorageKey() {
+  return Boolean(config.STORAGE_ENCRYPTION_KEY?.trim());
+}
+
+function runtimeStorageKey() {
+  return createHash("sha256")
+    .update(config.JWT_ACCESS_SECRET)
+    .update(":storage")
+    .digest();
+}
+
+function encryptionKey() {
+  if (hasConfiguredStorageKey()) {
+    try {
+      return deriveStorageEncryptionKey(config.STORAGE_ENCRYPTION_KEY!);
+    } catch (error) {
+      if (s3 && config.S3_BUCKET) throw error;
+      return runtimeStorageKey();
+    }
+  }
+  if (config.NODE_ENV === "production" && s3 && config.S3_BUCKET) {
     throw new AppError(
       500,
       "Storage encryption is not configured",
       "BAD_CONFIG",
     );
   }
-  return createHash("sha256").update(config.JWT_ACCESS_SECRET).digest();
+  return runtimeStorageKey();
 }
 
 function encrypt(bytes: Buffer) {
@@ -119,9 +159,21 @@ export async function deleteStoredDocument(storageKey: string) {
 }
 
 export function storageStatus() {
+  let encryptionReady = false;
+  try {
+    encryptionKey();
+    encryptionReady = true;
+  } catch {
+    encryptionReady = false;
+  }
+
   return {
     configured: Boolean(s3 && config.S3_BUCKET),
     mode: s3 ? "s3" : "memory",
+    encryption: {
+      configured: hasConfiguredStorageKey() || config.NODE_ENV !== "production",
+      ready: encryptionReady,
+    },
   } as const;
 }
 
