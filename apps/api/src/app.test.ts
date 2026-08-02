@@ -12,6 +12,7 @@ vi.mock("./pipeline/orchestrator.js", () => ({
 vi.mock("./pipeline/ask.js", () => ({ askGrounded: aiMocks.askGrounded }));
 
 import { createApp } from "./app.js";
+import { closeCache } from "./cache/index.js";
 import { repository } from "./db/repository.js";
 import { resetDriveTokens } from "./integrations/googleDrive.js";
 import { resetStorage } from "./integrations/storage.js";
@@ -157,10 +158,46 @@ describe("DischargeGuide API", () => {
     const response = await request(app).get("/health").expect(200);
     expect(response.body.status).toBe("ok");
     expect(response.body.database.mode).toBe("memory");
+    expect(response.body.database.ok).toBe(true);
     expect(response.body.storage.mode).toBe("memory");
+    // In the test environment Redis is unconfigured, so the cache reports
+    // healthy-by-default and the queue starts empty.
+    expect(response.body.cache).toEqual({
+      configured: false,
+      connected: false,
+      mode: "none",
+    });
+    expect(response.body.queue).toEqual({
+      queued: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      deadLetter: 0,
+      inFlight: 0,
+    });
     expect(response.body.integrations[0].scope).toBe(
       "https://www.googleapis.com/auth/drive.file",
     );
+  });
+
+  it("reports degraded health when a configured dependency is down", async () => {
+    const original = process.env.REDIS_URL;
+    process.env.REDIS_URL = "redis://127.0.0.1:1"; // nothing listening
+    try {
+      const response = await request(app).get("/health").expect(503);
+      expect(response.body.status).toBe("degraded");
+      expect(response.body.cache.configured).toBe(true);
+      expect(response.body.cache.connected).toBe(false);
+      // A degraded health check must still expose all the usual fields.
+      expect(response.body.database.mode).toBe("memory");
+      expect(response.body.ai.timeoutMs).toBe(45_000);
+    } finally {
+      // Deleting (not assigning undefined, which becomes the string "undefined")
+      // restores the unconfigured state that the rest of the suite expects.
+      if (original === undefined) delete process.env.REDIS_URL;
+      else process.env.REDIS_URL = original;
+      await closeCache(); // drop the failed connect attempt between tests
+    }
   });
 
   it("reports which AI providers are configured without leaking keys", async () => {
@@ -464,6 +501,14 @@ describe("DischargeGuide API", () => {
     queue.enqueue(documentId);
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(queue.getDeadLetter(documentId)?.attempts).toBe(3);
+    expect(queue.getStats()).toEqual({
+      queued: 0,
+      running: 0,
+      completed: 0,
+      failed: 1,
+      deadLetter: 1,
+      inFlight: 0,
+    });
     const document = repository.findDocument(documentId, "test-user");
     expect(document?.status).toBe("failed");
     expect(document?.failure?.code).toBe("AI_PROVIDER_UNAVAILABLE");

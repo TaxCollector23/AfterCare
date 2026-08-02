@@ -111,6 +111,26 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
     getDeadLetter(documentId: string) {
       return deadLetterQueue.get(documentId);
     },
+    getStats() {
+      let queued = 0;
+      let running = 0;
+      let completed = 0;
+      let failed = 0;
+      for (const job of jobs.values()) {
+        if (job.state === "queued") queued += 1;
+        else if (job.state === "running") running += 1;
+        else if (job.state === "completed") completed += 1;
+        else failed += 1;
+      }
+      return {
+        queued,
+        running,
+        completed,
+        failed,
+        deadLetter: deadLetterQueue.size,
+        inFlight: queued + running,
+      };
+    },
     listenerCount(documentId: string) {
       return (
         events.listenerCount(documentId) +

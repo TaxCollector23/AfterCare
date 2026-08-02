@@ -1,8 +1,9 @@
 import cors from "cors";
 import express from "express";
 import { ZodError } from "zod";
+import { cacheStatus, pingCache } from "./cache/index.js";
 import { config } from "./config.js";
-import { databaseStatus } from "./db/client.js";
+import { databaseHealth } from "./db/client.js";
 import { AiApiError, AppError } from "./errors.js";
 import { googleDriveStatus } from "./integrations/googleDrive.js";
 import { storageStatus } from "./integrations/storage.js";
@@ -42,12 +43,23 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(express.json({ limit: "1mb" }));
   app.use(hipaaAuditLog);
 
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
+  app.get("/health", async (_req, res) => {
+    // /health is Render's healthCheckPath: it must fail loudly (503) when a
+    // configured dependency is down so a degraded instance gets restarted
+    // instead of serving "ok" from a broken backend. Unconfigured pieces
+    // (memory DB, no Redis) are healthy by definition.
+    const database = await databaseHealth();
+    const cache = cacheStatus();
+    const databaseOk = database.ok;
+    const cacheOk = !cache.configured || (await pingCache());
+    const ok = databaseOk && cacheOk;
+    res.status(ok ? 200 : 503).json({
+      status: ok ? "ok" : "degraded",
       service: "discharge-guide-api",
-      database: databaseStatus(),
+      database,
       storage: storageStatus(),
+      cache,
+      queue: queue.getStats(),
       integrations: [googleDriveStatus()],
       // Ops visibility into the free-tier AI waterfall: which providers are
       // configured (never their keys) and the per-provider request timeout.

@@ -23,7 +23,16 @@ async function getClient(): Promise<RedisClientType | null> {
   if (!connecting) {
     connecting = (async () => {
       try {
-        const c: RedisClientType = createClient({ url });
+        const c: RedisClientType = createClient({
+          url,
+          // Fail fast instead of retrying forever against a dead Redis: a
+          // health probe must not hang, and a single failed connect is a
+          // clear signal to the caller that the cache is unavailable.
+          socket: {
+            reconnectStrategy: (retries) =>
+              retries > 2 ? false : 50 * 2 ** retries,
+          },
+        });
         c.on("error", () => undefined);
         await c.connect();
         client = c;
@@ -34,6 +43,36 @@ async function getClient(): Promise<RedisClientType | null> {
     })();
   }
   return connecting;
+}
+
+/** Cheap, synchronous cache status for /health. Never throws. */
+export function cacheStatus() {
+  return {
+    configured: Boolean(process.env.REDIS_URL),
+    connected: Boolean(client),
+    mode: process.env.REDIS_URL ? ("redis" as const) : ("none" as const),
+  };
+}
+
+/**
+ * Live Redis round-trip for readiness probes. Bounded so a dead or slow
+ * Redis degrades the probe instead of hanging it. Any error (including a
+ * client missing `ping`) resolves to "not healthy" rather than throwing.
+ */
+export async function pingCache(): Promise<boolean> {
+  return Promise.race([
+    (async () => {
+      const c = await getClient();
+      if (!c) return false;
+      try {
+        await c.ping();
+        return true;
+      } catch {
+        return false;
+      }
+    })(),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 2_000)),
+  ]);
 }
 
 async function getJson<T>(key: string): Promise<T | null> {
@@ -97,7 +136,8 @@ function isSuccessfulStageResult(value: unknown): boolean {
   return (
     typeof value === "object" &&
     value !== null &&
-    (value as { success?: unknown }).success === true
+    (value as { success?: unknown }).success === true &&
+    (value as { degraded?: unknown }).degraded !== true
   );
 }
 
@@ -191,8 +231,9 @@ export function resetOcrCache(): void {
 /** Closes the Redis connection. Call on graceful shutdown; safe to call even if never connected. */
 export async function closeCache(): Promise<void> {
   if (client) {
-    await client.quit();
+    await client.quit().catch(() => undefined);
     client = null;
-    connecting = null;
   }
+  // Drop a pending connect attempt too so the next call retries fresh.
+  connecting = null;
 }
