@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AiProviderFailure,
+  resetProviderCooldowns,
   runAiProviderWaterfall,
   type AiProviderContext,
   type AiProviderCredentials,
@@ -14,6 +15,11 @@ const credentials: AiProviderCredentials = {
 };
 
 const success = { value: "grounded result" };
+
+beforeEach(() => {
+  // The circuit breaker is module-level; keep every test deterministic.
+  resetProviderCooldowns();
+});
 
 describe("AI provider waterfall", () => {
   it("stops after OpenAI succeeds", async () => {
@@ -179,6 +185,54 @@ describe("AI provider waterfall", () => {
       "openai",
       "openrouter",
     ]);
+  });
+
+  it("skips a provider that recently failed (circuit breaker)", async () => {
+    // First run: OpenAI rate-limits, OpenRouter succeeds.
+    const first = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(new AiProviderFailure("rate_limit"))
+      .mockResolvedValueOnce(success);
+    await expect(runAiProviderWaterfall(first, credentials)).resolves.toBe(
+      success,
+    );
+
+    // OpenAI is now on cooldown: the next call must skip straight to OpenRouter.
+    const second = vi.fn(async (_context: AiProviderContext) => success);
+    await runAiProviderWaterfall(second, credentials);
+    expect(second.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openrouter",
+    ]);
+  });
+
+  it("skips every provider while all are on cooldown, then recovers after reset", async () => {
+    const alwaysFails = vi.fn(async () => {
+      throw new AiProviderFailure("rate_limit");
+    });
+    await expect(
+      runAiProviderWaterfall(alwaysFails, credentials),
+    ).resolves.toEqual({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      message: "AI processing is temporarily unavailable.",
+      retryable: true,
+    });
+    expect(alwaysFails).toHaveBeenCalledTimes(4);
+
+    // All four are cooled down: the next run attempts nothing.
+    const skipped = vi.fn(async (_context: AiProviderContext) => success);
+    await expect(
+      runAiProviderWaterfall(skipped, credentials),
+    ).resolves.toEqual({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      message: "AI processing is temporarily unavailable.",
+      retryable: true,
+    });
+    expect(skipped).not.toHaveBeenCalled();
+
+    resetProviderCooldowns();
+    const recovered = vi.fn(async (_context: AiProviderContext) => success);
+    await runAiProviderWaterfall(recovered, credentials);
+    expect(recovered.mock.calls[0]?.[0].slot).toBe("openai");
   });
 
   it("never logs or returns keys and raw provider errors", async () => {

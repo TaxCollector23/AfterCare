@@ -8,6 +8,9 @@ const schema = z.object({
   PORT: z.coerce.number().int().positive().default(3001),
   API_RATE_LIMIT: z.coerce.number().int().positive().default(500),
   UPLOAD_RATE_LIMIT: z.coerce.number().int().positive().default(100),
+  // /ask is the most expensive endpoint (real LLM calls), so it gets its own
+  // tighter per-user budget on top of the general API limit.
+  ASK_RATE_LIMIT: z.coerce.number().int().positive().default(60),
   WEB_ORIGIN: z.string().url().optional(),
   DATABASE_URL: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(32).optional(),

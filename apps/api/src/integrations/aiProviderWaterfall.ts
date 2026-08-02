@@ -125,6 +125,36 @@ function isValidationFailure(error: unknown) {
   );
 }
 
+/**
+ * Circuit breaker: after a provider fails with a retryable error, it is
+ * skipped for a short cooldown so a 429'd provider isn't hammered again on
+ * the very next call. Free tiers (OpenRouter `:free`, Gemini free) 429 often,
+ * so this keeps fallbacks snappy under load. Configurable via
+ * AI_PROVIDER_COOLDOWN_MS; 0 disables the breaker.
+ */
+const DEFAULT_PROVIDER_COOLDOWN_MS = 30_000;
+const providerCooldowns = new Map<AiProviderSlot, number>();
+
+function providerCooldownMs(): number {
+  const raw = process.env.AI_PROVIDER_COOLDOWN_MS;
+  // An empty or whitespace-only value is "unset", not "0" (Number("") is 0).
+  if (raw === undefined || raw.trim() === "") return DEFAULT_PROVIDER_COOLDOWN_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_PROVIDER_COOLDOWN_MS;
+}
+
+/** Clears the circuit-breaker state. Primarily for tests. */
+export function resetProviderCooldowns(): void {
+  providerCooldowns.clear();
+}
+
+function isOnCooldown(slot: AiProviderSlot, now: number): boolean {
+  const until = providerCooldowns.get(slot);
+  return until !== undefined && until > now;
+}
+
 function configuredCredentials(): AiProviderCredentials {
   return {
     openai: config.OPENAI_API_KEY,
@@ -173,8 +203,10 @@ export async function runAiProviderWaterfall<T>(
     },
   ];
 
+  const now = Date.now();
   for (const provider of providers) {
     if (!provider.apiKey) continue;
+    if (isOnCooldown(provider.slot, now)) continue;
     try {
       return await operation({
         apiKey: provider.apiKey,
@@ -184,6 +216,7 @@ export async function runAiProviderWaterfall<T>(
     } catch (error) {
       if (isValidationFailure(error)) return { ...VALIDATION_FAILED };
       if (!isRetryableAiProviderFailure(error)) throw error;
+      providerCooldowns.set(provider.slot, Date.now() + providerCooldownMs());
     }
   }
 

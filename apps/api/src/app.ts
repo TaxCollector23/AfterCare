@@ -9,7 +9,7 @@ import { googleDriveStatus } from "./integrations/googleDrive.js";
 import { storageStatus } from "./integrations/storage.js";
 import { authenticate } from "./middleware/auth.js";
 import { hipaaAuditLog } from "./middleware/hipaaLogging.js";
-import { apiRateLimit } from "./middleware/rateLimits.js";
+import { apiRateLimit, createAskRateLimit } from "./middleware/rateLimits.js";
 import { pipelineQueue, type PipelineQueue } from "./queue/pipelineQueue.js";
 import { accessibilityRouter } from "./routes/accessibility.js";
 import { appointmentsRouter } from "./routes/appointments.js";
@@ -25,6 +25,8 @@ interface CreateAppOptions {
   queue?: PipelineQueue;
   askGrounded?: AskGroundedFunction;
   heartbeatMs?: number;
+  /** Per-user hourly budget for /ask; overrides ASK_RATE_LIMIT. */
+  askRateLimit?: number;
 }
 
 export function createApp(options: CreateAppOptions = {}) {
@@ -86,7 +88,11 @@ export function createApp(options: CreateAppOptions = {}) {
   );
   app.use("/medications", medicationsRouter);
   app.use("/appointments", appointmentsRouter);
-  app.use("/ask", createAskRouter(options.askGrounded));
+  app.use(
+    "/ask",
+    createAskRateLimit(options.askRateLimit),
+    createAskRouter(options.askGrounded),
+  );
   app.use("/drive", driveRouter);
   app.use("/accessibility", accessibilityRouter);
   app.use("/documents", documentsRouter);
