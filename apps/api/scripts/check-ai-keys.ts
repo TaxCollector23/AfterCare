@@ -16,12 +16,20 @@ import OpenAI from "openai";
 /** Exactly the variables src/integrations/openai.ts reads. Keep in sync. */
 const RECOGNIZED = [
   { env: "OPENAI_API_KEY", label: "openai", family: "openai" as const },
-  { env: "GEMINI_API_KEY_PRIMARY", label: "gemini-primary", family: "gemini" as const },
-  { env: "GEMINI_API_KEY_FALLBACK", label: "gemini-fallback", family: "gemini" as const },
+  {
+    env: "GEMINI_API_KEY_PRIMARY",
+    label: "gemini-primary",
+    family: "gemini" as const,
+  },
+  {
+    env: "GEMINI_API_KEY_FALLBACK",
+    label: "gemini-fallback",
+    family: "gemini" as const,
+  },
 ];
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
-const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
 interface Probe {
   label: string;
@@ -59,16 +67,21 @@ async function probeGemini(apiKey: string): Promise<string> {
 
 function keyShapedStrays(): string[] {
   const recognized = new Set(RECOGNIZED.map((entry) => entry.env));
-  const looksLikeSecret = (value: string) => /^(sk-|sk-or-|sk-proj-|AIza|gsk_)/.test(value);
+  const looksLikeSecret = (value: string) =>
+    /^(sk-|sk-or-|sk-proj-|AIza|gsk_)/.test(value);
   const namedLikeKey = (name: string) =>
-    /(openai|openrouter|gemini|gpt|claude|anthropic)/i.test(name) && !/MODEL$/i.test(name);
+    /(openai|openrouter|gemini|gpt|claude|anthropic)/i.test(name) &&
+    !/MODEL$/i.test(name);
 
   return Object.entries(process.env)
     .filter(([name, value]) => {
       if (recognized.has(name)) return false;
-      if (/^(CLAUDE|ANTHROPIC_BASE|VERCEL|npm_|TURBO|NX_)/i.test(name)) return false;
+      if (/^(CLAUDE|ANTHROPIC_BASE|VERCEL|npm_|TURBO|NX_)/i.test(name))
+        return false;
       const trimmed = value?.trim() ?? "";
-      return trimmed.length > 0 && (looksLikeSecret(trimmed) || namedLikeKey(name));
+      return (
+        trimmed.length > 0 && (looksLikeSecret(trimmed) || namedLikeKey(name))
+      );
     })
     .map(([name]) => name);
 }
@@ -101,7 +114,9 @@ async function main() {
     return;
   }
 
-  console.log(`\nProbing ${configured.length} provider(s) with a real request...\n`);
+  console.log(
+    `\nProbing ${configured.length} provider(s) with a real request...\n`,
+  );
 
   const results: Probe[] = await Promise.all(
     configured.map(async ({ env, label, family }): Promise<Probe> => {
@@ -109,7 +124,10 @@ async function main() {
       const model = family === "openai" ? OPENAI_MODEL : GEMINI_MODEL;
       const startedAt = Date.now();
       try {
-        const raw = family === "openai" ? await probeOpenAi(apiKey) : await probeGemini(apiKey);
+        const raw =
+          family === "openai"
+            ? await probeOpenAi(apiKey)
+            : await probeGemini(apiKey);
         JSON.parse(raw.replace(/^```(?:json)?\s*|\s*```$/g, ""));
         return { label, model, ok: true, ms: Date.now() - startedAt };
       } catch (error) {
@@ -134,7 +152,9 @@ async function main() {
   const working = results.filter((result) => result.ok);
   console.log(`\n${working.length} of ${results.length} provider(s) working.`);
   if (working.length === 0) {
-    console.error("FAIL  No working provider — uploads would fail with an AI error.");
+    console.error(
+      "FAIL  No working provider — uploads would fail with an AI error.",
+    );
     process.exitCode = 1;
     return;
   }

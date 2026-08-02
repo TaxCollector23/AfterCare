@@ -25,6 +25,24 @@ function forwardPipelineEvent(emit: PipelineEmit, event: PipelineStageEvent) {
   });
 }
 
+/**
+ * The pipeline's Appointment.date is a calendar date (YYYY-MM-DD) or null; the
+ * public contract's Appointment.date is a full ISO-8601 datetime string (the
+ * /appointments/:id/calendar ICS route depends on this). Resolve a concrete
+ * calendar date to midnight UTC; when only free text like "in 2 weeks" is
+ * available, leave it as plain text for display ? it is not a valid instant
+ * and must never be fed to the ICS route as if it were one.
+ */
+export function resolveAppointmentDate(
+  date: string | null,
+  dateText: string | undefined,
+): string {
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return `${date}T00:00:00.000Z`;
+  }
+  return dateText ?? "";
+}
+
 function publicPlan(plan: PipelineRecoveryPlan): RecoveryPlan {
   return {
     documentId: plan.documentId,
@@ -37,7 +55,7 @@ function publicPlan(plan: PipelineRecoveryPlan): RecoveryPlan {
     })),
     appointments: plan.appointments.map((appointment) => ({
       ...appointment,
-      date: appointment.date ?? appointment.dateText ?? "",
+      date: resolveAppointmentDate(appointment.date, appointment.dateText),
     })),
     warnings: plan.warnings.map((warning) => {
       const action = warning.action.toLowerCase();
