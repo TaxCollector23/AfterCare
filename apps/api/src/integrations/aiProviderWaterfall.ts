@@ -155,6 +155,26 @@ function isOnCooldown(slot: AiProviderSlot, now: number): boolean {
   return until !== undefined && until > now;
 }
 
+/**
+ * Ops visibility into the circuit breaker: how many ms each provider is
+ * currently cooling down for, or omitted when not on cooldown. Expired
+ * entries are pruned on read so the map never accumulates stale slots.
+ */
+export function providerCooldownStatus(): Partial<
+  Record<AiProviderSlot, number>
+> {
+  const now = Date.now();
+  const status: Partial<Record<AiProviderSlot, number>> = {};
+  for (const [slot, until] of providerCooldowns) {
+    if (until <= now) {
+      providerCooldowns.delete(slot);
+    } else {
+      status[slot] = until - now;
+    }
+  }
+  return status;
+}
+
 function configuredCredentials(): AiProviderCredentials {
   return {
     openai: config.OPENAI_API_KEY,

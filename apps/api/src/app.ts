@@ -5,11 +5,13 @@ import { ZodError } from "zod";
 import { cacheStatus, pingCache } from "./cache/index.js";
 import { config } from "./config.js";
 import { databaseHealth } from "./db/client.js";
+import { providerCooldownStatus } from "./integrations/aiProviderWaterfall.js";
 import { AiApiError, AppError } from "./errors.js";
 import { googleDriveStatus } from "./integrations/googleDrive.js";
 import { storageStatus } from "./integrations/storage.js";
 import { authenticate } from "./middleware/auth.js";
 import { hipaaAuditLog } from "./middleware/hipaaLogging.js";
+import { securityHeaders } from "./middleware/securityHeaders.js";
 import { apiRateLimit, createAskRateLimit } from "./middleware/rateLimits.js";
 import { pipelineQueue, type PipelineQueue } from "./queue/pipelineQueue.js";
 import { accessibilityRouter } from "./routes/accessibility.js";
@@ -44,6 +46,7 @@ export function createApp(options: CreateAppOptions = {}) {
     }),
   );
   app.use(express.json({ limit: "1mb" }));
+  app.use(securityHeaders);
   app.use(hipaaAuditLog);
 
   app.get("/health", async (_req, res) => {
@@ -74,6 +77,8 @@ export function createApp(options: CreateAppOptions = {}) {
           geminiPrimary: Boolean(config.GEMINI_API_KEY_PRIMARY),
           geminiFallback: Boolean(config.GEMINI_API_KEY_FALLBACK),
         },
+        // Circuit-breaker state: ms remaining per provider on cooldown.
+        cooldowns: providerCooldownStatus(),
       },
     });
   });

@@ -18,6 +18,8 @@ interface QueueJob {
   attempts: number;
   state: "queued" | "running" | "completed" | "failed";
   errorCode?: string;
+  /** Set when the job reaches a terminal state, for retention pruning. */
+  endedAt?: number;
 }
 
 const delay = (milliseconds: number) =>
@@ -25,12 +27,32 @@ const delay = (milliseconds: number) =>
 
 type PipelineRunner = typeof runPipeline;
 
-export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
+export interface PipelineQueueOptions {
+  /**
+   * How long a terminal (completed/failed) job, its SSE history, and its
+   * dead-letter entry are kept before being pruned. Defaults to 30 minutes.
+   * Set to 0 to disable pruning entirely (retains everything; mostly tests).
+   */
+  retentionMs?: number;
+  /** Max SSE events retained per document. Defaults to 500. */
+  maxHistoryPerDocument?: number;
+}
+
+const DEFAULT_RETENTION_MS = 30 * 60 * 1_000;
+const DEFAULT_MAX_HISTORY = 500;
+
+export function createPipelineQueue(
+  runner: PipelineRunner = runPipeline,
+  options: PipelineQueueOptions = {},
+) {
   const events = new EventEmitter();
   events.setMaxListeners(100);
   const history = new Map<string, StreamEvent[]>();
   const jobs = new Map<string, QueueJob>();
   const deadLetterQueue = new Map<string, QueueJob>();
+  const retentionMs = options.retentionMs ?? DEFAULT_RETENTION_MS;
+  const maxHistoryPerDocument =
+    options.maxHistoryPerDocument ?? DEFAULT_MAX_HISTORY;
 
   function publish(documentId: string, event: PipelineEvent) {
     const streamEvent = {
@@ -43,8 +65,32 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
     };
     const documentHistory = history.get(documentId) ?? [];
     documentHistory.push(streamEvent);
+    // A single document can emit a lot of SSE events (retries re-emit each
+    // stage); cap so a long-running process can't accumulate unbounded text.
+    if (documentHistory.length > maxHistoryPerDocument) {
+      documentHistory.splice(0, documentHistory.length - maxHistoryPerDocument);
+    }
     history.set(documentId, documentHistory);
     events.emit(documentId, streamEvent);
+  }
+
+  /**
+   * Drops terminal jobs, their history, and their dead-letter entries once
+   * they've outlived the retention window. Without this, a long-running
+   * process accumulates every document ever processed in memory.
+   */
+  function prune(now = Date.now()) {
+    if (retentionMs <= 0) return;
+    const cutoff = now - retentionMs;
+    for (const [documentId, job] of jobs) {
+      if (job.state !== "completed" && job.state !== "failed") {
+        continue;
+      }
+      if ((job.endedAt ?? 0) > cutoff) continue;
+      jobs.delete(documentId);
+      history.delete(documentId);
+      deadLetterQueue.delete(documentId);
+    }
   }
 
   async function run(job: QueueJob) {
@@ -58,6 +104,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
       const plan: RecoveryPlan = result;
       repository.savePlan(job.documentId, plan);
       job.state = "completed";
+      job.endedAt = Date.now();
       events.emit(`${job.documentId}:complete`, plan);
     } catch (error) {
       const publicError = sanitizeAiError(error);
@@ -68,6 +115,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
         return;
       }
       job.state = "failed";
+      job.endedAt = Date.now();
       job.errorCode = publicError.code;
       deadLetterQueue.set(job.documentId, { ...job });
       repository.updateDocument(job.documentId, {
@@ -81,6 +129,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
 
   return {
     enqueue(documentId: string) {
+      prune();
       if (jobs.has(documentId)) return jobs.get(documentId)!;
       const job: QueueJob = { documentId, attempts: 0, state: "queued" };
       jobs.set(documentId, job);
@@ -153,6 +202,8 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
         events.listenerCount(`${documentId}:failed`)
       );
     },
+    /** Manually prune terminal state now. Exposed for ops and tests. */
+    prune,
     reset() {
       events.removeAllListeners();
       history.clear();
