@@ -19,8 +19,20 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL ?? 'gemini-1.5-flash';
 
 const BACKOFF_MS = [500, 1000, 2000];
 
+/** Timeout per LLM API call in milliseconds (30 seconds). Prevents hanging on unresponsive APIs. */
+const API_TIMEOUT_MS = 30 * 1000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`API call timeout after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,17 +152,22 @@ async function openaiJson(system: string, user: string, model: string, maxRetrie
   const client = getOpenAI();
   if (!client) throw new Error('OPENAI_API_KEY not set');
   return withRetry(async () => {
-    const response = await client.chat.completions.create({
-      model,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-    const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('OpenAI returned an empty response');
-    return content;
+    return withTimeout(
+      (async () => {
+        const response = await client.chat.completions.create({
+          model,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+        });
+        const content = response.choices[0]?.message?.content;
+        if (!content) throw new Error('OpenAI returned an empty response');
+        return content;
+      })(),
+      API_TIMEOUT_MS,
+    );
   }, maxRetries);
 }
 
@@ -158,15 +175,20 @@ async function geminiJson(tier: 0 | 1, system: string, user: string, maxRetries?
   const client = getGemini(tier);
   if (!client) throw new Error(`GEMINI_API_KEY${tier === 1 ? '_2' : ''} not set`);
   return withRetry(async () => {
-    const model = client.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: system,
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-    const result = await model.generateContent(user);
-    const text = result.response.text();
-    if (!text || typeof text !== 'string') throw new Error('Gemini returned an empty or invalid response');
-    return text;
+    return withTimeout(
+      (async () => {
+        const model = client.getGenerativeModel({
+          model: GEMINI_MODEL,
+          systemInstruction: system,
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const result = await model.generateContent(user);
+        const text = result.response.text();
+        if (!text || typeof text !== 'string') throw new Error('Gemini returned an empty or invalid response');
+        return text;
+      })(),
+      API_TIMEOUT_MS,
+    );
   }, maxRetries);
 }
 
@@ -207,17 +229,22 @@ async function openaiVision(buffer: Buffer, mimeType: string): Promise<string> {
   const client = getOpenAI();
   if (!client) throw new Error('OPENAI_API_KEY not set');
   return withRetry(async () => {
-    const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
-    const response = await client.chat.completions.create({
-      model: OPENAI_VISION_MODEL,
-      messages: [
-        { role: 'system', content: VISION_INSTRUCTION },
-        { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }] },
-      ],
-    });
-    const content = response.choices[0]?.message?.content;
-    if (!content || typeof content !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
-    return content;
+    return withTimeout(
+      (async () => {
+        const dataUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+        const response = await client.chat.completions.create({
+          model: OPENAI_VISION_MODEL,
+          messages: [
+            { role: 'system', content: VISION_INSTRUCTION },
+            { role: 'user', content: [{ type: 'image_url', image_url: { url: dataUrl } }] },
+          ],
+        });
+        const content = response.choices[0]?.message?.content;
+        if (!content || typeof content !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
+        return content;
+      })(),
+      API_TIMEOUT_MS,
+    );
   });
 }
 
@@ -225,14 +252,19 @@ async function geminiVision(tier: 0 | 1, buffer: Buffer, mimeType: string): Prom
   const client = getGemini(tier);
   if (!client) throw new Error(`GEMINI_API_KEY${tier === 1 ? '_2' : ''} not set`);
   return withRetry(async () => {
-    const model = client.getGenerativeModel({ model: GEMINI_MODEL });
-    const result = await model.generateContent([
-      VISION_INSTRUCTION,
-      { inlineData: { mimeType, data: buffer.toString('base64') } },
-    ]);
-    const text = result.response.text();
-    if (!text || typeof text !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
-    return text;
+    return withTimeout(
+      (async () => {
+        const model = client.getGenerativeModel({ model: GEMINI_MODEL });
+        const result = await model.generateContent([
+          VISION_INSTRUCTION,
+          { inlineData: { mimeType, data: buffer.toString('base64') } },
+        ]);
+        const text = result.response.text();
+        if (!text || typeof text !== 'string') throw new Error('Vision transcription returned an empty or invalid response');
+        return text;
+      })(),
+      API_TIMEOUT_MS,
+    );
   });
 }
 
