@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import { currentMode } from "../../services/config";
-
-const LOCAL_KEY = "aftercare:caregivers";
-
-function readLocal(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "[]") as string[];
-  } catch {
-    return [];
-  }
-}
+import {
+  addCaregiver,
+  isAccountSynced,
+  listCaregivers,
+  watchCaregivers,
+} from "../../services/caregivers";
 
 export default function CaregiverMode() {
   const { user } = useAuth();
@@ -20,33 +15,9 @@ export default function CaregiverMode() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  const syncedToAccount = currentMode() === "firebase" && user && !user.isLocal;
+  const syncedToAccount = isAccountSynced(user);
 
-  useEffect(() => {
-    if (!user) return;
-    if (!syncedToAccount) {
-      setCaregivers(readLocal());
-      return;
-    }
-    let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
-    (async () => {
-      try {
-        const { doc, onSnapshot } = await import("firebase/firestore");
-        const { db } = await import("../../firebase");
-        if (cancelled) return;
-        unsubscribe = onSnapshot(doc(db, "users", user.uid), (snap) => {
-          setCaregivers((snap.data()?.caregiverEmails as string[]) ?? []);
-        });
-      } catch {
-        setCaregivers(readLocal());
-      }
-    })();
-    return () => {
-      cancelled = true;
-      unsubscribe?.();
-    };
-  }, [user, syncedToAccount]);
+  useEffect(() => watchCaregivers(user, setCaregivers), [user, syncedToAccount]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -56,14 +27,10 @@ export default function CaregiverMode() {
     setError(null);
     setInfo(null);
     try {
-      if (syncedToAccount) {
-        const { addCaregiverEmail } = await import("../../services/firestore");
-        await addCaregiverEmail(user.uid, value);
-      } else {
-        const next = Array.from(new Set([...readLocal(), value]));
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
-        setCaregivers(next);
-      }
+      await addCaregiver(user, value);
+      // The synced path re-renders from its Firestore subscription; the
+      // on-device path has no watcher, so re-read it here.
+      if (!syncedToAccount) setCaregivers(await listCaregivers(user));
       setInfo(`${value} was added to your care circle.`);
       setEmail("");
     } catch (err) {

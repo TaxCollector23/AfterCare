@@ -1,12 +1,28 @@
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { pool } from "./client.js";
-import { runMigrations } from "./runMigrations.js";
 
-// CLI entry point (`pnpm --filter @discharge-guide/api migrate`). The server
-// runs the same migration at boot; this exists for applying it by hand.
 if (!pool) throw new Error("DATABASE_URL is required to run migrations");
 
+const migrationsDirectory = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "migrations",
+);
+const migration = await readFile(
+  join(migrationsDirectory, "001_initial.sql"),
+  "utf8",
+);
+const client = await pool.connect();
 try {
-  await runMigrations();
+  await client.query("BEGIN");
+  await client.query("SELECT pg_advisory_xact_lock(640218)");
+  await client.query(migration);
+  await client.query("COMMIT");
+} catch (error) {
+  await client.query("ROLLBACK");
+  throw error;
 } finally {
+  client.release();
   await pool.end();
 }

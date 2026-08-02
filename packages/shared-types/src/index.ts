@@ -1,3 +1,12 @@
+export * from "./accessibility.js";
+export * from "./checkIn.js";
+export * from "./citations.js";
+export * from "./conditionExplainer.js";
+export * from "./pipelineProgress.js";
+export * from "./readmissionRisk.js";
+export * from "./recoveryDay.js";
+export * from "./symptomCheckIn.js";
+
 export type PipelineStage =
   | "ocr"
   | "extract"
@@ -58,6 +67,14 @@ export interface TimelineEntry {
   sourceLines: number[];
 }
 
+export interface Explanation {
+  id: string;
+  term: string;
+  plainText: string;
+  confidence: number;
+  sourceLines: number[];
+}
+
 export interface RecoveryPlan {
   documentId: string;
   status: "processing" | "ready" | "failed";
@@ -66,6 +83,8 @@ export interface RecoveryPlan {
   appointments: Appointment[];
   warnings: WarningSign[];
   timeline: TimelineEntry[];
+  /** Plain-language term explanations from the explanation stage. */
+  explanations: Explanation[];
   isPlaceholder: boolean;
 }
 

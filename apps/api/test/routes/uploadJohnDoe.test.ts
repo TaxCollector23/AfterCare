@@ -60,6 +60,7 @@ describe("POST /upload with the John Doe sample report", () => {
         appointments: [],
         warnings: [],
         timeline: [],
+        explanations: [],
         isPlaceholder: false,
       } satisfies RecoveryPlan;
     });

@@ -11,7 +11,10 @@ const schema = z.object({
   // /ask is the most expensive endpoint (real LLM calls), so it gets its own
   // tighter per-user budget on top of the general API limit.
   ASK_RATE_LIMIT: z.coerce.number().int().positive().default(60),
-  WEB_ORIGIN: z.string().url().optional(),
+  // One or more browser origins, comma-separated. Not `.url()`: a list isn't a
+  // single URL, and entries may carry a `*.` wildcard. Parsing and validation
+  // live in cors.ts, which drops anything unusable.
+  WEB_ORIGIN: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(32).optional(),
   JWT_REFRESH_SECRET: z.string().min(32).optional(),

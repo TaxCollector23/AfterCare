@@ -25,22 +25,6 @@ document, and when it isn't confident, it says so and points back at the origina
 This constraint drove most of the architecture below. It is the difference between
 a medical tool and a plausible-sounding liability.
 
-Discharge communication failure is a patient-safety problem in the clinical sense
-of the term — it is a leading contributor to avoidable readmission. So safety here
-isn't the topic sitting on top of the app; it's the constraint the system is built
-around. Three places it shows up in the code rather than the pitch:
-
-- **The model's grounding claim is verified, not believed.** Cited line numbers are
-  re-checked against the real OCR line set; an uncited "from your document" answer
-  is demoted to general information with its confidence capped.
-- **It fails closed.** With no AI credentials, or during a provider outage,
-  processing returns a sanitized retryable error. It never substitutes invented
-  medications, appointments, or warnings to fill the gap.
-- **Uncertainty is surfaced, not smoothed over.** Below-threshold confidence renders
-  as "check the original document" instead of being presented as settled fact.
-
-The failure mode we designed against isn't downtime. It's a confident wrong dose.
-
 ---
 
 ## Why this isn't an LLM wrapper
@@ -49,8 +33,8 @@ A wrapper is one prompt and one response. The failure mode of a wrapper in a med
 context is that it confidently makes up a dosage. Most of this codebase exists to
 make that impossible.
 
-**Seven-stage pipeline with independent degradation.**
-`ocr → extract → meds → appts → warnings → timeline → explain`
+**Eight-stage pipeline with independent degradation.**
+`ocr → extract → meds → appts → warnings → timeline → explain → judge`
 
 OCR and extraction are load-bearing — if they fail, the run stops honestly. The five
 detection stages degrade *independently*: an unreadable medication table yields an

@@ -78,12 +78,6 @@ export const repository = {
     const document = state.documents.get(documentId);
     return document?.userId === userId ? document : undefined;
   },
-  /** Owner-scoped documents, newest upload first. Backing for GET /documents. */
-  listDocuments(userId: string) {
-    return [...state.documents.values()]
-      .filter((document) => document.userId === userId)
-      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  },
   /** Internal pipeline lookup; authorization is enforced by the route before enqueue/ask. */
   findDocumentById(documentId: string) {
     return state.documents.get(documentId);
