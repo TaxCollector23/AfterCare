@@ -1,0 +1,184 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  AiProviderFailure,
+  runAiProviderWaterfall,
+  type AiProviderContext,
+  type AiProviderCredentials,
+} from "./aiProviderWaterfall.js";
+
+const credentials: AiProviderCredentials = {
+  openai: "openai-test-key-never-log",
+  geminiPrimary: "gemini-primary-test-key-never-log",
+  geminiFallback: "gemini-fallback-test-key-never-log",
+};
+
+const success = { value: "grounded result" };
+
+describe("AI provider waterfall", () => {
+  it("stops after OpenAI succeeds", async () => {
+    const operation = vi.fn(async () => success);
+
+    await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
+      success,
+    );
+    expect(operation).toHaveBeenCalledTimes(1);
+    expect(operation.mock.calls[0]?.[0].slot).toBe("openai");
+  });
+
+  it("falls back from OpenAI retryable failure to Gemini primary", async () => {
+    const operation = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(new AiProviderFailure("rate_limit"))
+      .mockResolvedValueOnce(success);
+
+    await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
+      success,
+    );
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openai",
+      "gemini_primary",
+    ]);
+  });
+
+  it("falls back to Gemini secondary after two retryable failures", async () => {
+    const operation = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(new AiProviderFailure("timeout"))
+      .mockRejectedValueOnce(new AiProviderFailure("server"))
+      .mockResolvedValueOnce(success);
+
+    await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
+      success,
+    );
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openai",
+      "gemini_primary",
+      "gemini_fallback",
+    ]);
+  });
+
+  it("returns a safe unavailable result after all providers fail", async () => {
+    const operation = vi.fn(async () => {
+      throw new AiProviderFailure("network", "raw provider network failure");
+    });
+
+    await expect(
+      runAiProviderWaterfall(operation, credentials),
+    ).resolves.toEqual({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      message: "AI processing is temporarily unavailable.",
+      retryable: true,
+    });
+    expect(operation).toHaveBeenCalledTimes(3);
+  });
+
+  it("skips missing OpenAI credentials and starts with Gemini primary", async () => {
+    const operation = vi.fn(async () => success);
+
+    await runAiProviderWaterfall(operation, {
+      geminiPrimary: credentials.geminiPrimary,
+      geminiFallback: credentials.geminiFallback,
+    });
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "gemini_primary",
+    ]);
+  });
+
+  it("skips missing Gemini primary credentials and continues to Gemini secondary", async () => {
+    const operation = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(new AiProviderFailure("quota_exhausted"))
+      .mockResolvedValueOnce(success);
+
+    await runAiProviderWaterfall(operation, {
+      openai: credentials.openai,
+      geminiFallback: credentials.geminiFallback,
+    });
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openai",
+      "gemini_fallback",
+    ]);
+  });
+
+  it("does not continue after a permanent validation failure", async () => {
+    const operation = vi.fn(async () => {
+      throw new AiProviderFailure("validation", "raw invalid medical response");
+    });
+
+    await expect(
+      runAiProviderWaterfall(operation, credentials),
+    ).resolves.toEqual({
+      code: "AI_VALIDATION_FAILED",
+      message: "The request could not be processed safely.",
+      retryable: false,
+    });
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "authentication",
+    "authorization",
+    "malformed_request",
+    "programming",
+    "parsing",
+  ] as const)("does not fall back for %s failures", async (kind) => {
+    const failure = new AiProviderFailure(kind, `raw ${kind} failure`);
+    const operation = vi.fn(async () => {
+      throw failure;
+    });
+
+    await expect(runAiProviderWaterfall(operation, credentials)).rejects.toBe(
+      failure,
+    );
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { status: 408 },
+    { statusCode: 429 },
+    { status: 500 },
+    { status: 503 },
+    { code: "ETIMEDOUT" },
+    { code: "RESOURCE_EXHAUSTED" },
+    new TypeError("fetch failed", { cause: { code: "ECONNRESET" } }),
+  ])("falls back for retryable provider failure %#", async (failure) => {
+    const operation = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce(success);
+
+    await runAiProviderWaterfall(operation, credentials);
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openai",
+      "gemini_primary",
+    ]);
+  });
+
+  it("never logs or returns keys and raw provider errors", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const operation = vi.fn(async ({ apiKey }: AiProviderContext) => {
+      throw new AiProviderFailure(
+        "server",
+        `raw provider response containing ${apiKey}`,
+      );
+    });
+
+    const result = await runAiProviderWaterfall(operation, credentials);
+    const serialized = JSON.stringify(result);
+    expect(serialized).toBe(
+      JSON.stringify({
+        code: "AI_PROVIDER_UNAVAILABLE",
+        message: "AI processing is temporarily unavailable.",
+        retryable: true,
+      }),
+    );
+    expect(serialized).not.toMatch(/openai|gemini|raw provider|test-key/i);
+    expect(log).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    log.mockRestore();
+    error.mockRestore();
+  });
+});

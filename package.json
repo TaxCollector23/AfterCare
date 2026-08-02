@@ -2,12 +2,23 @@
   "name": "discharge-guide",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/api", "apps/web", "packages/*"],
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "dev": "npm run dev --workspace apps/web",
-    "build": "npm run build --workspaces --if-present",
-    "preview": "npm run preview --workspace apps/web"
+    "dev": "pnpm --filter @dischargeguide/web dev",
+    "dev:api": "pnpm --filter @discharge-guide/api dev",
+    "build": "pnpm --filter @dischargeguide/web... --filter @discharge-guide/api... build",
+    "preview": "pnpm --filter @dischargeguide/web preview",
+    "format": "prettier --write \"apps/api/**/*.{ts,json}\" \"apps/web/**/*.{ts,tsx,json}\" \"packages/shared-types/**/*.{ts,json}\" \"docs/**/*.{md,yaml}\" \"*.{json,yaml}\"",
+    "format:check": "prettier --check \"apps/api/**/*.{ts,json}\" \"apps/web/**/*.{ts,tsx,json}\" \"packages/shared-types/**/*.{ts,json}\" \"docs/**/*.{md,yaml}\" \"*.{json,yaml}\"",
+    "lint": "eslint apps/api/src apps/web/src packages/shared-types/src",
+    "test": "pnpm --filter @discharge-guide/api test",
+    "typecheck": "pnpm --filter @discharge-guide/api... --filter @dischargeguide/web typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.39.0"
   }
 }
