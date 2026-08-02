@@ -25,8 +25,13 @@ import { callJson, visionTranscribe } from "../../src/integrations/openai.js";
 
 const ENV_KEYS = [
   "OPENAI_API_KEY",
+  "OPENROUTER_API_KEY",
   "GEMINI_API_KEY_PRIMARY",
   "GEMINI_API_KEY_FALLBACK",
+  "AI_TIMEOUT_MS",
+  "OPENROUTER_MODEL",
+  "GEMINI_MODEL",
+  "OPENAI_MODEL",
 ] as const;
 
 const providerError = (status: number) =>
@@ -34,7 +39,9 @@ const providerError = (status: number) =>
 const geminiOk = (json: string) => ({ response: { text: () => json } });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks, not clearAllMocks: clearing leaves queued `*Once` values in
+  // place, so an unconsumed queue from a failing test leaks into the next one.
+  vi.resetAllMocks();
   for (const key of ENV_KEYS) delete process.env[key];
 });
 
@@ -145,5 +152,95 @@ describe("provider SDK adapters", () => {
     await expect(
       visionTranscribe(Buffer.from("fake-png"), "image/png"),
     ).resolves.toBe("transcribed text");
+  });
+
+  it("falls back from OpenAI to a free OpenRouter model", async () => {
+    process.env.OPENAI_API_KEY = "openai-test";
+    process.env.OPENROUTER_API_KEY = "openrouter-test";
+    process.env.GEMINI_API_KEY_PRIMARY = "gemini-test";
+    openaiCreateMock
+      .mockRejectedValueOnce(providerError(429))
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: '{"e":5}' } }],
+      });
+
+    await expect(
+      callJson({ system: "s", user: "u", maxRetries: 0 }),
+    ).resolves.toEqual({ e: 5 });
+    expect(openaiCreateMock).toHaveBeenCalledTimes(2);
+    expect(openaiCreateMock.mock.calls[1]?.[0].model).toBe(
+      "deepseek/deepseek-chat-v3-0324:free",
+    );
+  });
+
+  it("uses OpenRouter when OpenAI is not configured", async () => {
+    process.env.OPENROUTER_API_KEY = "openrouter-test";
+    process.env.GEMINI_API_KEY_PRIMARY = "gemini-test";
+    openaiCreateMock.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"f":6}' } }],
+    });
+
+    await expect(callJson({ system: "s", user: "u" })).resolves.toEqual({
+      f: 6,
+    });
+    expect(openaiCreateMock.mock.calls[0]?.[0].model).toBe(
+      "deepseek/deepseek-chat-v3-0324:free",
+    );
+  });
+
+  it("honors an OpenRouter model override", async () => {
+    process.env.OPENROUTER_API_KEY = "openrouter-test";
+    openaiCreateMock.mockResolvedValueOnce({
+      choices: [{ message: { content: '{"h":8}' } }],
+    });
+
+    await expect(
+      callJson({
+        system: "s",
+        user: "u",
+        openrouterModel: "qwen/qwen3-coder:free",
+      }),
+    ).resolves.toEqual({ h: 8 });
+    expect(openaiCreateMock.mock.calls[0]?.[0].model).toBe(
+      "qwen/qwen3-coder:free",
+    );
+  });
+
+  it("recovers structured JSON from prose-wrapped free-model output", async () => {
+    process.env.OPENROUTER_API_KEY = "openrouter-test";
+    openaiCreateMock.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content: 'Here you go:\n{"g":7}\nHope that helps!',
+          },
+        },
+      ],
+    });
+
+    await expect(callJson({ system: "s", user: "u" })).resolves.toEqual({
+      g: 7,
+    });
+  });
+
+  it("applies a configurable per-provider AI timeout", async () => {
+    process.env.OPENAI_API_KEY = "openai-test";
+    process.env.AI_TIMEOUT_MS = "5";
+    openaiCreateMock.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          setTimeout(() => reject(providerError(500)), 50);
+        }),
+    );
+
+    // OpenAI times out at 5ms, nothing else is configured -> safe unavailable.
+    await expect(
+      callJson({ system: "s", user: "u", maxRetries: 0 }),
+    ).rejects.toEqual({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      message: "AI processing is temporarily unavailable.",
+      retryable: true,
+    });
+    expect(openaiCreateMock).toHaveBeenCalledTimes(1);
   });
 });

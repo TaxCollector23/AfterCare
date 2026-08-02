@@ -1,4 +1,5 @@
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -105,6 +106,16 @@ export async function loadDocument(storageKey: string) {
   if (!object)
     throw new AppError(404, "Stored document not found", "NOT_FOUND");
   return decrypt(object);
+}
+
+export async function deleteStoredDocument(storageKey: string) {
+  if (s3 && config.S3_BUCKET) {
+    await s3.send(
+      new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: storageKey }),
+    );
+  } else {
+    memoryObjects.delete(storageKey);
+  }
 }
 
 export function storageStatus() {

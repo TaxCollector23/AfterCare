@@ -8,6 +8,7 @@ import {
 
 const credentials: AiProviderCredentials = {
   openai: "openai-test-key-never-log",
+  openrouter: "openrouter-test-key-never-log",
   geminiPrimary: "gemini-primary-test-key-never-log",
   geminiFallback: "gemini-fallback-test-key-never-log",
 };
@@ -25,7 +26,7 @@ describe("AI provider waterfall", () => {
     expect(operation.mock.calls[0]?.[0].slot).toBe("openai");
   });
 
-  it("falls back from OpenAI retryable failure to Gemini primary", async () => {
+  it("falls back from OpenAI to free OpenRouter on a retryable failure", async () => {
     const operation = vi
       .fn<(context: AiProviderContext) => Promise<typeof success>>()
       .mockRejectedValueOnce(new AiProviderFailure("rate_limit"))
@@ -36,15 +37,15 @@ describe("AI provider waterfall", () => {
     );
     expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
       "openai",
-      "gemini_primary",
+      "openrouter",
     ]);
   });
 
-  it("falls back to Gemini secondary after two retryable failures", async () => {
+  it("falls through OpenRouter to Gemini primary after two retryable failures", async () => {
     const operation = vi
       .fn<(context: AiProviderContext) => Promise<typeof success>>()
       .mockRejectedValueOnce(new AiProviderFailure("timeout"))
-      .mockRejectedValueOnce(new AiProviderFailure("server"))
+      .mockRejectedValueOnce(new AiProviderFailure("quota_exhausted"))
       .mockResolvedValueOnce(success);
 
     await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
@@ -52,6 +53,29 @@ describe("AI provider waterfall", () => {
     );
     expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
       "openai",
+      "openrouter",
+      "gemini_primary",
+    ]);
+  });
+
+  it("exhausts all four providers before giving up", async () => {
+    const operation = vi
+      .fn<(context: AiProviderContext) => Promise<typeof success>>()
+      .mockRejectedValueOnce(new AiProviderFailure("rate_limit"))
+      .mockRejectedValueOnce(new AiProviderFailure("network"))
+      .mockRejectedValueOnce(new AiProviderFailure("server"))
+      .mockRejectedValueOnce(new AiProviderFailure("quota_exhausted"));
+
+    await expect(
+      runAiProviderWaterfall(operation, credentials),
+    ).resolves.toEqual({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      message: "AI processing is temporarily unavailable.",
+      retryable: true,
+    });
+    expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
+      "openai",
+      "openrouter",
       "gemini_primary",
       "gemini_fallback",
     ]);
@@ -69,18 +93,18 @@ describe("AI provider waterfall", () => {
       message: "AI processing is temporarily unavailable.",
       retryable: true,
     });
-    expect(operation).toHaveBeenCalledTimes(3);
+    expect(operation).toHaveBeenCalledTimes(4);
   });
 
-  it("skips missing OpenAI credentials and starts with Gemini primary", async () => {
+  it("starts with OpenRouter when OpenAI credentials are missing", async () => {
     const operation = vi.fn(async (_context: AiProviderContext) => success);
 
     await runAiProviderWaterfall(operation, {
+      openrouter: credentials.openrouter,
       geminiPrimary: credentials.geminiPrimary,
-      geminiFallback: credentials.geminiFallback,
     });
     expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
-      "gemini_primary",
+      "openrouter",
     ]);
   });
 
@@ -88,14 +112,17 @@ describe("AI provider waterfall", () => {
     const operation = vi
       .fn<(context: AiProviderContext) => Promise<typeof success>>()
       .mockRejectedValueOnce(new AiProviderFailure("quota_exhausted"))
+      .mockRejectedValueOnce(new AiProviderFailure("rate_limit"))
       .mockResolvedValueOnce(success);
 
     await runAiProviderWaterfall(operation, {
       openai: credentials.openai,
+      openrouter: credentials.openrouter,
       geminiFallback: credentials.geminiFallback,
     });
     expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
       "openai",
+      "openrouter",
       "gemini_fallback",
     ]);
   });
@@ -150,7 +177,7 @@ describe("AI provider waterfall", () => {
     await runAiProviderWaterfall(operation, credentials);
     expect(operation.mock.calls.map(([context]) => context.slot)).toEqual([
       "openai",
-      "gemini_primary",
+      "openrouter",
     ]);
   });
 
@@ -175,7 +202,9 @@ describe("AI provider waterfall", () => {
         retryable: true,
       }),
     );
-    expect(serialized).not.toMatch(/openai|gemini|raw provider|test-key/i);
+    expect(serialized).not.toMatch(
+      /openai|openrouter|gemini|raw provider|test-key/i,
+    );
     expect(log).not.toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
     log.mockRestore();

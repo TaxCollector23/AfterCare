@@ -60,6 +60,19 @@ vi.mock("../../src/pipeline/timelineBuilder.js", () => ({
 vi.mock("../../src/pipeline/explanationGenerator.js", () => ({
   generateExplanations: vi.fn(async () => ok([], 100, [])),
 }));
+vi.mock("../../src/pipeline/judge.js", () => ({
+  judgeFindings: vi.fn(async () =>
+    ok({ overall: "pass", summary: "All verified.", verdicts: [] }, 100, []),
+  ),
+  judgeConfidence: vi.fn(() => 100),
+  applyJudgeVerdicts: vi.fn(
+    (findings: {
+      medications: unknown[];
+      appointments: unknown[];
+      warnings: unknown[];
+    }) => ({ ...findings, reviewReasons: [] as string[] }),
+  ),
+}));
 
 import { runPipeline } from "../../src/pipeline/index.js";
 
@@ -98,6 +111,8 @@ describe("runPipeline", () => {
       "timeline:done",
       "explain:started",
       "explain:done",
+      "judge:started",
+      "judge:done",
     ]);
   });
 

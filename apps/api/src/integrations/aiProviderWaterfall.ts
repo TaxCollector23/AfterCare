@@ -4,16 +4,18 @@ import type {
 } from "@discharge-guide/shared-types";
 import { config } from "../config.js";
 
-export type AiProviderSlot = "openai" | "gemini_primary" | "gemini_fallback";
+export type AiProviderSlot =
+  "openai" | "openrouter" | "gemini_primary" | "gemini_fallback";
 
 export interface AiProviderContext {
   apiKey: string;
-  family: "openai" | "gemini";
+  family: "openai" | "openrouter" | "gemini";
   slot: AiProviderSlot;
 }
 
 export interface AiProviderCredentials {
   openai?: string;
+  openrouter?: string;
   geminiPrimary?: string;
   geminiFallback?: string;
 }
@@ -126,6 +128,7 @@ function isValidationFailure(error: unknown) {
 function configuredCredentials(): AiProviderCredentials {
   return {
     openai: config.OPENAI_API_KEY,
+    openrouter: config.OPENROUTER_API_KEY,
     geminiPrimary: config.GEMINI_API_KEY_PRIMARY,
     geminiFallback: config.GEMINI_API_KEY_FALLBACK,
   };
@@ -140,6 +143,9 @@ export async function runAiProviderWaterfall<T>(
   operation: AiProviderOperation<T>,
   credentials: AiProviderCredentials = configuredCredentials(),
 ): Promise<AiFunctionResult<T>> {
+  // Order matters: paid OpenAI first (strongest), then free OpenRouter and
+  // free Gemini as budget-friendly fallbacks, so a missing quota never
+  // blocks the pipeline while free capacity exists.
   const providers: Array<{
     apiKey?: string;
     family: AiProviderContext["family"];
@@ -149,6 +155,11 @@ export async function runAiProviderWaterfall<T>(
       slot: "openai",
       family: "openai",
       apiKey: normalizedCredential(credentials.openai),
+    },
+    {
+      slot: "openrouter",
+      family: "openrouter",
+      apiKey: normalizedCredential(credentials.openrouter),
     },
     {
       slot: "gemini_primary",

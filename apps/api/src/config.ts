@@ -16,8 +16,12 @@ const schema = z.object({
   AWS_REGION: z.string().default("us-west-2"),
   S3_BUCKET: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
   GEMINI_API_KEY_PRIMARY: z.string().optional(),
   GEMINI_API_KEY_FALLBACK: z.string().optional(),
+  // Validated for ops; the live value is read at call time by
+  // integrations/openai.ts (which supports tests overriding it per-call).
+  AI_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.string().url().optional(),
