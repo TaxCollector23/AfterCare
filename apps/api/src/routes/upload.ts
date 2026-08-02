@@ -6,10 +6,23 @@ import { hashFile, storeDocument } from "../integrations/storage.js";
 import { uploadRateLimit } from "../middleware/rateLimits.js";
 import { pipelineQueue, type PipelineQueue } from "../queue/pipelineQueue.js";
 
-const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
+// Must stay in step with the OCR pipeline's IMAGE_MIME_TYPES (pipeline/ocr.ts)
+// and with the browser's own check in apps/web/src/services/documents.ts.
+// image/jpg and image/webp were missing here even though the pipeline reads
+// both, so a webp scan was refused for no reason.
+const allowedTypes = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+export const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
+  // Matches the 20MB the browser advertises in documents.ts. At 15MB the
+  // browser accepted files the API then rejected.
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (_req, file, callback) => {
     if (!allowedTypes.has(file.mimetype)) {
       callback(new Error("Unsupported file type"));
