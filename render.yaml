@@ -12,8 +12,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Must match the browser's Origin exactly — app.ts sets
+      # `cors({ origin: WEB_ORIGIN ?? false })`, so a mismatch blocks every
+      # request from the real site. This is the production domain; preview
+      # deployments are served from generated subdomains and will be refused.
       - key: WEB_ORIGIN
-        value: https://aftercare-web-eta.vercel.app
+        value: https://marinhackstigermygoat.vercel.app
       - key: API_RATE_LIMIT
         value: "500"
       - key: UPLOAD_RATE_LIMIT
