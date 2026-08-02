@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import multer from "multer";
-import { documents } from "../db/schema.js";
-import { createEmptyPlan, processDocument } from "../pipeline/orchestrator.js";
+import { repository } from "../db/repository.js";
+import { hashFile, storeDocument } from "../integrations/storage.js";
+import { uploadRateLimit } from "../middleware/rateLimits.js";
+import { pipelineQueue } from "../queue/pipelineQueue.js";
 
 const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png"]);
 const upload = multer({
@@ -19,28 +21,48 @@ const upload = multer({
 
 export const uploadRouter = Router();
 
-uploadRouter.post("/", upload.single("document"), (req, res) => {
+uploadRouter.post("/", uploadRateLimit, upload.single("document"), async (req, res, next) => {
+  try {
   if (!req.file) {
     res.status(400).json({ error: "Attach a PDF, JPG, or PNG in the document field." });
     return;
   }
 
+  const userId = req.userId!;
+  const fileHash = hashFile(req.file.buffer);
+  const duplicate = repository.findDocumentByHash(fileHash, userId);
+  if (duplicate) {
+    res.status(200).json({
+      documentId: duplicate.id,
+      status: duplicate.status,
+      processUrl: `/process/${duplicate.id}`,
+      deduplicated: true
+    });
+    return;
+  }
+
   const documentId = randomUUID();
-  documents.set(documentId, {
+  const storageKey = await storeDocument(userId, documentId, req.file.buffer);
+  repository.createDocument({
     id: documentId,
-    userId: req.userId,
+    userId,
     filename: req.file.originalname,
     mimeType: req.file.mimetype,
+    fileHash,
+    storageKey,
     uploadedAt: new Date().toISOString(),
-    status: "uploaded",
-    plan: createEmptyPlan(documentId)
+    status: "uploaded"
   });
 
-  void processDocument(documentId, req.file.buffer);
+  pipelineQueue.enqueue(documentId);
   res.status(202).json({
     documentId,
     status: "processing",
     processUrl: `/process/${documentId}`,
-    isPlaceholder: true
+    originalDocumentUrl: `/documents/${documentId}/original`,
+    deduplicated: false
   });
+  } catch (error) {
+    next(error);
+  }
 });

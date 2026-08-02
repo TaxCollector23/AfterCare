@@ -1,18 +1,31 @@
-import type {
-  Appointment,
-  ProcessingEvent,
-  RecoveryPlan
-} from "@discharge-guide/shared-types";
-import { EventEmitter } from "node:events";
+import type { Appointment, Medication, RecoveryPlan } from "@discharge-guide/shared-types";
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+}
+
+export interface SessionRecord {
+  id: string;
+  userId: string;
+  refreshTokenHash: string;
+  expiresAt: string;
+  createdAt: string;
+}
 
 export interface DocumentRecord {
   id: string;
   userId: string;
   filename: string;
   mimeType: string;
+  fileHash: string;
+  storageKey: string;
   uploadedAt: string;
   status: "uploaded" | "processing" | "ready" | "failed";
-  plan: RecoveryPlan;
+  failureMessage?: string;
+  plan?: RecoveryPlan;
 }
 
 export interface AccessibilityPreferences {
@@ -23,32 +36,30 @@ export interface AccessibilityPreferences {
   voiceReading: boolean;
 }
 
-export const documents = new Map<string, DocumentRecord>();
-export const processingHistory = new Map<string, ProcessingEvent[]>();
-export const processingEvents = new EventEmitter();
-export const accessibilityPreferences = new Map<string, AccessibilityPreferences>();
-
-export function findMedication(medicationId: string, userId: string) {
-  for (const document of documents.values()) {
-    if (document.userId !== userId) continue;
-    const medication = document.plan.medications.find(({ id }) => id === medicationId);
-    if (medication) return medication;
-  }
-  return undefined;
+export interface AuditLogRecord {
+  id: string;
+  userId?: string;
+  action: string;
+  resource: string;
+  timestamp: string;
+  ipAddress: string;
+  statusCode: number;
 }
 
-export function findAppointment(appointmentId: string, userId: string): Appointment | undefined {
-  for (const document of documents.values()) {
-    if (document.userId !== userId) continue;
-    const appointment = document.plan.appointments.find(({ id }) => id === appointmentId);
-    if (appointment) return appointment;
-  }
-  return undefined;
+export interface AdherenceRecord {
+  id: string;
+  medicationId: string;
+  userId: string;
+  takenAt: string;
 }
 
-export function resetStore() {
-  documents.clear();
-  processingHistory.clear();
-  accessibilityPreferences.clear();
-  processingEvents.removeAllListeners();
+export interface DatabaseState {
+  users: Map<string, UserRecord>;
+  sessions: Map<string, SessionRecord>;
+  documents: Map<string, DocumentRecord>;
+  medications: Map<string, Medication>;
+  appointments: Map<string, Appointment>;
+  adherence: AdherenceRecord[];
+  preferences: Map<string, AccessibilityPreferences>;
+  auditLogs: AuditLogRecord[];
 }
