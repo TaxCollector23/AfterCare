@@ -28,10 +28,10 @@ export const isFirebaseConfigured = Boolean(
 let resolvedMode: DataMode | null = null;
 let detection: Promise<DataMode> | null = null;
 
-async function probeBackend(): Promise<boolean> {
+async function probeBackend(timeoutMs: number): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(`${apiBaseUrl}/health`, { signal: controller.signal });
     clearTimeout(timer);
     if (!res.ok) return false;
@@ -42,14 +42,56 @@ async function probeBackend(): Promise<boolean> {
   }
 }
 
+const upgradeListeners = new Set<() => void>();
+
+/**
+ * Fires if the backend turns out to be reachable *after* we already settled on a
+ * lesser mode. Free-tier hosting sleeps when idle and takes 30-60s to wake, which
+ * is far longer than a first page load should ever block on — so we settle fast,
+ * keep knocking in the background, and upgrade if it answers.
+ */
+export function onBackendAvailable(listener: () => void): () => void {
+  upgradeListeners.add(listener);
+  return () => upgradeListeners.delete(listener);
+}
+
+/** Knocks with a long timeout, backing off, then gives up rather than looping forever. */
+function retryWhileWaking(): void {
+  const delays = [3_000, 8_000, 15_000, 25_000, 40_000];
+  let attempt = 0;
+
+  const knock = async () => {
+    if (resolvedMode === "backend") return;
+    if (attempt >= delays.length) return;
+    const wait = delays[attempt];
+    attempt += 1;
+    setTimeout(async () => {
+      if (resolvedMode === "backend") return;
+      // A waking instance can sit on the connection, so allow far more headroom
+      // here than the initial probe gets.
+      if (await probeBackend(30_000)) {
+        resolvedMode = "backend";
+        upgradeListeners.forEach((listener) => listener());
+        return;
+      }
+      void knock();
+    }, wait);
+  };
+
+  void knock();
+}
+
 /** Resolves once per page load. Never rejects. */
 export function detectMode(): Promise<DataMode> {
   if (resolvedMode) return Promise.resolve(resolvedMode);
   if (detection) return detection;
 
   detection = (async () => {
-    const hasBackend = await probeBackend();
+    // Deliberately short: this gates first paint, so a sleeping backend must not
+    // hold the page hostage. `retryWhileWaking` recovers the slow case.
+    const hasBackend = await probeBackend(4_000);
     resolvedMode = hasBackend ? "backend" : isFirebaseConfigured ? "firebase" : "local";
+    if (!hasBackend) retryWhileWaking();
     return resolvedMode;
   })();
 
