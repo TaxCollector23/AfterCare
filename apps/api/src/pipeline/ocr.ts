@@ -1,11 +1,11 @@
 /**
- * Stage 1: OCR ? PDF/image bytes -> line-numbered text with per-line confidence.
+ * Stage 1: OCR - PDF/image bytes -> line-numbered text with per-line confidence.
  *
  * Every later stage's `sourceLines` refers back to the line numbers produced
  * here, so this is the one stage where getting line numbering right matters
  * more than getting the text perfect.
  *
- * - PDFs with a text layer: `pdf-parse`, no LLM call, high confidence.
+ * - PDFs with a text layer: `unpdf`, no LLM call, high confidence.
  * - Scanned PDFs (no text layer): each page is rasterized to a PNG via
  *   `pdf-to-img`, then transcribed through the vision waterfall.
  *
@@ -34,7 +34,7 @@ export interface OcrInput {
 }
 
 // Must match visionTranscribe's own accepted set in ../integrations/openai.ts
-// exactly ? OpenAI's vision API doesn't take HEIC without client-side
+// exactly - OpenAI's vision API doesn't take HEIC without client-side
 // conversion, so it's deliberately not offered here either.
 const IMAGE_MIME_TYPES = new Set([
   "image/png",
@@ -55,7 +55,7 @@ const VISION_CONCURRENCY = Number(process.env.PDF_OCR_VISION_CONCURRENCY ?? 3);
 interface ExtractResult {
   text: string;
   pageCount: number;
-  /** Which path produced the text ? drives the confidence heuristic below. */
+  /** Which path produced the text - drives the confidence heuristic below. */
   source: "pdf-text-layer" | "vision";
 }
 
@@ -112,7 +112,7 @@ async function rasterizeOrExplain(buffer: Buffer): Promise<RasterizedDoc> {
 }
 
 async function extractFromPdf(buffer: Buffer): Promise<ExtractResult> {
-  // A fresh document proxy per call — see the state-leak note at the top.
+  // A fresh document proxy per call - see the state-leak note at the top.
   const document = await getDocumentProxy(new Uint8Array(buffer));
   const { text, totalPages } = await extractText(document, {
     mergePages: true,
