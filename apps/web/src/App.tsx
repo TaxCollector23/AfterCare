@@ -4,6 +4,7 @@ import { useAuth } from "./hooks/useAuth";
 import { migrateLocalDocuments } from "./services/documents";
 import { AccessibilityProvider } from "./hooks/useAccessibility";
 import { ReadAloudButton } from "./components/ReadAloudButton";
+import { AIStatusBanner } from "./components/AIStatusBanner";
 import { BottomNav } from "./components/BottomNav/BottomNav";
 
 import Landing from "./screens/Landing/Landing";
@@ -86,6 +87,8 @@ export default function App() {
           <span className="spacer" />
           <ReadAloudButton />
         </header>
+
+        <AIStatusBanner />
 
         <main className="content" id="main-content">
           <AppRoutes />
