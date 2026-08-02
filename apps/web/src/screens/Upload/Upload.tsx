@@ -2,22 +2,21 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
 import { useDocuments } from "../../hooks/useDocuments";
-import { createUploadedDocumentRecord } from "../../services/firestore";
-import { uploadDischargeFile } from "../../services/storage";
+import { uploadDocument } from "../../services/documents";
 import { fetchDriveFileBlob, isGoogleDriveConfigured, pickFileFromGoogleDrive } from "../../services/googleDrive";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import type { DocumentStatus } from "../../types";
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
-  uploaded: "Waiting to process",
+  uploaded: "Saved",
   processing: "Processing",
   ready: "Ready",
-  error: "Failed",
+  error: "Couldn't be processed",
 };
 
 export default function Upload() {
   const { user } = useAuth();
-  const { documents } = useDocuments(user?.uid);
+  const { documents } = useDocuments(user);
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -32,17 +31,10 @@ export default function Upload() {
     setError(null);
     setProgress(0);
     try {
-      const { promise } = uploadDischargeFile(user!.uid, file, setProgress);
-      const { storagePath } = await promise;
-      const docId = await createUploadedDocumentRecord({
-        uid: user!.uid,
-        fileName: file.name,
-        source: "upload",
-        storagePath,
-      });
-      navigate(`/processing/${docId}`);
+      const { documentId } = await uploadDocument(user!, file, setProgress);
+      navigate(`/processing/${documentId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong uploading that file.");
+      setError(err instanceof Error ? err.message : "Something went wrong adding that file.");
     } finally {
       setProgress(null);
     }
@@ -53,10 +45,9 @@ export default function Upload() {
     setDriveBusy(true);
     try {
       const picked = await pickFileFromGoogleDrive();
-      if (!picked) return; // user cancelled
+      if (!picked) return; // cancelled
       const blob = await fetchDriveFileBlob(picked);
-      const file = new File([blob], picked.name, { type: picked.mimeType });
-      await handleFile(file);
+      await handleFile(new File([blob], picked.name, { type: picked.mimeType }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't connect to Google Drive.");
     } finally {
@@ -110,14 +101,18 @@ export default function Upload() {
         {progress !== null ? (
           <>
             <span className="spinner" />
-            <p style={{ marginTop: 12 }}>Uploading… {progress}%</p>
+            <p style={{ marginTop: 12 }}>Adding your document… {progress}%</p>
             <div className="progress-bar" style={{ maxWidth: 260, margin: "12px auto" }}>
               <span style={{ width: `${progress}%` }} />
             </div>
           </>
         ) : (
           <>
-            <i className="ph-duotone ph-upload-simple" style={{ fontSize: 40, color: "var(--color-accent)" }} aria-hidden="true" />
+            <i
+              className="ph-duotone ph-upload-simple"
+              style={{ fontSize: 40, color: "var(--color-accent)" }}
+              aria-hidden="true"
+            />
             <p style={{ margin: "12px 0" }}>Drag a PDF here, or</p>
             <div className="flex" style={{ justifyContent: "center", flexWrap: "wrap" }}>
               <button className="btn btn-solid" onClick={() => fileInputRef.current?.click()}>
@@ -154,25 +149,18 @@ export default function Upload() {
         )}
       </div>
 
-      <div className="row-between" style={{ margin: "var(--sp4) 0" }}>
-        <hr className="hair" style={{ flex: 1 }} />
-        <span className="gloss">or</span>
-        <hr className="hair" style={{ flex: 1 }} />
-      </div>
-
-      <button
-        className="btn btn-outline btn-block btn-lg"
-        onClick={handleGoogleDrive}
-        disabled={!isGoogleDriveConfigured || driveBusy}
-      >
-        {driveBusy && <span className="spinner" style={{ marginRight: 8 }} />}
-        <i className="ph-duotone ph-cloud-arrow-down" aria-hidden="true" /> Connect from Google Drive
-      </button>
-      {!isGoogleDriveConfigured && (
-        <p className="gloss" style={{ marginTop: 8 }}>
-          Google Drive isn't connected yet — add <code>VITE_GOOGLE_DRIVE_CLIENT_ID</code> and{" "}
-          <code>VITE_GOOGLE_DRIVE_API_KEY</code> to <code>apps/web/.env.local</code> to enable this.
-        </p>
+      {isGoogleDriveConfigured && (
+        <>
+          <div className="row-between" style={{ margin: "var(--sp4) 0" }}>
+            <hr className="hair" style={{ flex: 1 }} />
+            <span className="gloss">or</span>
+            <hr className="hair" style={{ flex: 1 }} />
+          </div>
+          <button className="btn btn-outline btn-block btn-lg" onClick={handleGoogleDrive} disabled={driveBusy}>
+            {driveBusy && <span className="spinner" style={{ marginRight: 8 }} />}
+            <i className="ph-duotone ph-cloud-arrow-down" aria-hidden="true" /> Connect from Google Drive
+          </button>
+        </>
       )}
     </div>
   );

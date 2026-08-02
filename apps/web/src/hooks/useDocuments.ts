@@ -1,33 +1,34 @@
 import { useEffect, useState } from "react";
-import { watchUserDocuments } from "../services/firestore";
+import { watchDocuments } from "../services/documents";
+import type { AppUser } from "../services/session";
 import type { UploadedDocument } from "../types";
 
-export function useDocuments(uid: string | undefined) {
+export function useDocuments(user: AppUser | null) {
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!uid) {
+    if (!user) {
       setDocuments([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const unsubscribe = watchUserDocuments(
-      uid,
+    const unsubscribe = watchDocuments(
+      user,
       (docs) => {
         setDocuments(docs);
-        setLoading(false);
         setError(null);
+        setLoading(false);
       },
-      (err) => {
-        setError(err.message || "Couldn't load your documents.");
+      (message) => {
+        setError(message);
         setLoading(false);
       }
     );
     return unsubscribe;
-  }, [uid]);
+  }, [user]);
 
   return { documents, loading, error };
 }

@@ -17,43 +17,52 @@ import AskAI from "./screens/AskAI/AskAI";
 import ExplainTerms from "./screens/ExplainTerms/ExplainTerms";
 import Accessibility from "./screens/Accessibility/Accessibility";
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  if (loading) {
-    return (
-      <div style={{ display: "flex", justifyContent: "center", padding: "var(--sp8)" }}>
-        <span className="spinner" />
-      </div>
-    );
-  }
-  if (!user) return <Navigate to="/" replace />;
+function Loading() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", padding: "var(--sp8)" }}>
+      <span className="spinner" />
+    </div>
+  );
+}
+
+/** Only redirects when this deployment actually expects a sign-in. In local mode
+ *  a user always exists, so every route is reachable immediately. */
+function Guarded({ children }: { children: React.ReactNode }) {
+  const { loading, needsSignIn } = useAuth();
+  if (loading) return <Loading />;
+  if (needsSignIn) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth();
+  const { loading, needsSignIn } = useAuth();
 
   return (
     <Routes>
-      <Route path="/" element={loading ? null : user ? <Navigate to="/dashboard" replace /> : <Landing />} />
-      <Route path="/upload" element={<ProtectedRoute><Upload /></ProtectedRoute>} />
-      <Route path="/processing/:documentId" element={<ProtectedRoute><Processing /></ProtectedRoute>} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/medications" element={<ProtectedRoute><Medication /></ProtectedRoute>} />
-      <Route path="/appointments" element={<ProtectedRoute><Appointments /></ProtectedRoute>} />
-      <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
-      <Route path="/emergency" element={<ProtectedRoute><Emergency /></ProtectedRoute>} />
-      <Route path="/caregiver" element={<ProtectedRoute><CaregiverMode /></ProtectedRoute>} />
-      <Route path="/ask" element={<ProtectedRoute><AskAI /></ProtectedRoute>} />
-      <Route path="/terms" element={<ProtectedRoute><ExplainTerms /></ProtectedRoute>} />
-      <Route path="/accessibility" element={<ProtectedRoute><Accessibility /></ProtectedRoute>} />
+      <Route
+        path="/"
+        element={
+          loading ? <Loading /> : needsSignIn ? <Landing /> : <Navigate to="/dashboard" replace />
+        }
+      />
+      <Route path="/upload" element={<Guarded><Upload /></Guarded>} />
+      <Route path="/processing/:documentId" element={<Guarded><Processing /></Guarded>} />
+      <Route path="/dashboard" element={<Guarded><Dashboard /></Guarded>} />
+      <Route path="/medications" element={<Guarded><Medication /></Guarded>} />
+      <Route path="/appointments" element={<Guarded><Appointments /></Guarded>} />
+      <Route path="/timeline" element={<Guarded><Timeline /></Guarded>} />
+      <Route path="/emergency" element={<Guarded><Emergency /></Guarded>} />
+      <Route path="/caregiver" element={<Guarded><CaregiverMode /></Guarded>} />
+      <Route path="/ask" element={<Guarded><AskAI /></Guarded>} />
+      <Route path="/terms" element={<Guarded><ExplainTerms /></Guarded>} />
+      <Route path="/accessibility" element={<Guarded><Accessibility /></Guarded>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, needsSignIn } = useAuth();
 
   return (
     <AccessibilityProvider>
@@ -72,7 +81,7 @@ export default function App() {
           <AppRoutes />
         </main>
 
-        {user && <BottomNav />}
+        {user && !needsSignIn && <BottomNav />}
       </div>
     </AccessibilityProvider>
   );

@@ -93,6 +93,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@discharge-guide/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       firebase:
         specifier: ^11.0.2
         version: 11.10.0

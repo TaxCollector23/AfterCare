@@ -1,9 +1,11 @@
 import { useAccessibility } from "../../hooks/useAccessibility";
-import { signOutUser } from "../../services/auth";
+import { signOut } from "../../services/session";
+import { useAuth } from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
 export default function Accessibility() {
   const a11y = useAccessibility();
+  const { user, refresh } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -45,16 +47,19 @@ export default function Accessibility() {
         </Row>
       </div>
 
-      <button
-        className="btn btn-outline"
-        style={{ marginTop: "var(--sp6)" }}
-        onClick={async () => {
-          await signOutUser();
-          navigate("/");
-        }}
-      >
-        <i className="ph-duotone ph-sign-out" aria-hidden="true" /> Sign out
-      </button>
+      {user && !user.isLocal && (
+        <button
+          className="btn btn-outline"
+          style={{ marginTop: "var(--sp6)" }}
+          onClick={async () => {
+            await signOut();
+            await refresh();
+            navigate("/");
+          }}
+        >
+          <i className="ph-duotone ph-sign-out" aria-hidden="true" /> Sign out
+        </button>
+      )}
     </div>
   );
 }

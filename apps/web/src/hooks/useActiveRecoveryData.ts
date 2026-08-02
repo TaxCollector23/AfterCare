@@ -2,13 +2,13 @@ import { useAuth } from "./useAuth";
 import { useDocuments } from "./useDocuments";
 import { useRecoveryData } from "./useRecoveryData";
 
-/** Finds the most recently processed ("ready") document and returns its recovery data,
- *  along with enough state for screens to render an honest empty/loading/error state. */
+/** Most recently processed document plus its recovery guide, with enough state
+ *  for screens to render an honest loading / empty / error view. */
 export function useActiveRecoveryData() {
   const { user } = useAuth();
-  const { documents, loading: docsLoading, error: docsError } = useDocuments(user?.uid);
+  const { documents, loading: docsLoading, error: docsError } = useDocuments(user);
   const readyDoc = documents.find((d) => d.status === "ready");
-  const { data, loading: dataLoading, error: dataError } = useRecoveryData(user?.uid, readyDoc?.id);
+  const { data, loading: dataLoading, error: dataError } = useRecoveryData(user, readyDoc?.id);
 
   return {
     hasAnyDocuments: documents.length > 0,
