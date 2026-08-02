@@ -73,8 +73,8 @@ export async function buildTimeline(
       // meds/appts JSON) — only filter out lines that don't exist at all.
       const sourceLines = Array.isArray(t.sourceLines)
         ? validLines
-          ? t.sourceLines.filter((n) => validLines.has(n))
-          : t.sourceLines
+          ? t.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n))
+          : t.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n))
         : [];
       const rawConfidence = Math.max(0, Math.min(100, t.confidence ?? 0));
       return {

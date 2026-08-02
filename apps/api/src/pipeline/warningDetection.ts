@@ -50,7 +50,7 @@ export async function detectWarnings(
 
     const result: Warning[] = warnings.map((w) => {
       const sourceLines = Array.isArray(w.sourceLines)
-        ? w.sourceLines.filter((n) => validLines.has(n))
+        ? w.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n))
         : [];
       const rawConfidence = Math.max(0, Math.min(100, w.confidence ?? 0));
       return {

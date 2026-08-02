@@ -55,7 +55,7 @@ export async function detectMedications(
 
     const result: Medication[] = medications.map((m) => {
       const sourceLines = Array.isArray(m.sourceLines)
-        ? m.sourceLines.filter((n) => validLines.has(n))
+        ? m.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n))
         : [];
       const rawConfidence = Math.max(0, Math.min(100, m.confidence ?? 0));
       return {

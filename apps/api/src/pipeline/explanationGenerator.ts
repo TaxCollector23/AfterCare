@@ -45,7 +45,7 @@ export async function generateExplanations(ocr: OcrResult): Promise<StageResult<
 
     const result: Explanation[] = explanations.map((e) => {
       const sourceLines = Array.isArray(e.sourceLines)
-        ? e.sourceLines.filter((n) => validLines.has(n))
+        ? e.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n))
         : [];
       const rawConfidence = Math.max(0, Math.min(100, e.confidence ?? 0));
       return {

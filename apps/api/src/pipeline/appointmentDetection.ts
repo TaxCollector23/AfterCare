@@ -53,7 +53,7 @@ export async function detectAppointments(
 
     const result: Appointment[] = appointments.map((a) => {
       const sourceLines = Array.isArray(a.sourceLines)
-        ? a.sourceLines.filter((n) => validLines.has(n))
+        ? a.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n))
         : [];
       const rawConfidence = Math.max(0, Math.min(100, a.confidence ?? 0));
       return {
