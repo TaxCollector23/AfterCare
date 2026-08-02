@@ -22,8 +22,8 @@ pnpm install
 pnpm dev
 ```
 
-The API listens on `http://localhost:3001`. Copy `apps/api/.env.example` to `.env` and supply
-database, encryption, S3, JWT, and Google credentials before production use. Run
+Set `WEB_ORIGIN` and `PORT` for the local environment. Copy `apps/api/.env.example` to `.env`
+and supply database, encryption, S3, JWT, and Google credentials before production use. Run
 `pnpm --filter @discharge-guide/api migrate` to apply the PostgreSQL schema.
 
 ## Production gaps

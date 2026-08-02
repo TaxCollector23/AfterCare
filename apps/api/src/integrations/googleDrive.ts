@@ -11,13 +11,15 @@ interface DriveState {
 }
 
 function requireConfigured() {
-  if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET) {
+  if (!config.GOOGLE_CLIENT_ID || !config.GOOGLE_CLIENT_SECRET || !config.GOOGLE_REDIRECT_URI) {
     throw new AppError(503, "Google Drive integration is not configured", "DRIVE_NOT_CONFIGURED");
   }
 }
 
 export function googleDriveStatus() {
-  const configured = Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET);
+  const configured = Boolean(
+    config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET && config.GOOGLE_REDIRECT_URI
+  );
   return {
     provider: "google_drive",
     configured,
@@ -34,7 +36,7 @@ export function getDriveAuthorization(userId: string) {
   });
   const params = new URLSearchParams({
     client_id: config.GOOGLE_CLIENT_ID!,
-    redirect_uri: config.GOOGLE_REDIRECT_URI,
+    redirect_uri: config.GOOGLE_REDIRECT_URI!,
     response_type: "code",
     scope: DRIVE_FILE_SCOPE,
     access_type: "offline",
@@ -66,7 +68,7 @@ export async function completeDriveAuthorization(code: string, state: string) {
       code,
       client_id: config.GOOGLE_CLIENT_ID!,
       client_secret: config.GOOGLE_CLIENT_SECRET!,
-      redirect_uri: config.GOOGLE_REDIRECT_URI,
+      redirect_uri: config.GOOGLE_REDIRECT_URI!,
       grant_type: "authorization_code"
     })
   });

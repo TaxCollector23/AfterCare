@@ -1,10 +1,10 @@
-import type { PipelineEmit, RecoveryPlan } from "@discharge-guide/shared-types";
+import type { AiFunctionResult, PipelineEmit, RecoveryPlan } from "@discharge-guide/shared-types";
 
 // Typed handoff mock only. Person A replaces this implementation.
 export async function runPipeline(
   documentId: string,
   emit: PipelineEmit
-): Promise<RecoveryPlan> {
+): Promise<AiFunctionResult<RecoveryPlan>> {
   emit({ stage: "ocr", status: "started", data: null });
   emit({ stage: "ocr", status: "completed", data: { isPlaceholder: true } });
   return {

@@ -1,6 +1,7 @@
-import type { PipelineEvent, RecoveryPlan } from "@discharge-guide/shared-types";
+import type { PipelineEvent, RecoveryPlan, StructuredAiError } from "@discharge-guide/shared-types";
 import { EventEmitter } from "node:events";
 import { repository } from "../db/repository.js";
+import { isStructuredAiError, sanitizeAiError } from "../errors.js";
 import { runPipeline } from "../pipeline/orchestrator.js";
 
 export interface StreamEvent extends PipelineEvent {
@@ -12,7 +13,7 @@ interface QueueJob {
   documentId: string;
   attempts: number;
   state: "queued" | "running" | "completed" | "failed";
-  error?: string;
+  errorCode?: string;
 }
 
 const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -27,7 +28,14 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
   const deadLetterQueue = new Map<string, QueueJob>();
 
   function publish(documentId: string, event: PipelineEvent) {
-    const streamEvent = { ...event, documentId, timestamp: new Date().toISOString() };
+    const streamEvent = {
+      ...event,
+      ...(event.status === "failed" && event.error
+        ? { error: sanitizeAiError(event.error), data: null }
+        : {}),
+      documentId,
+      timestamp: new Date().toISOString()
+    };
     const documentHistory = history.get(documentId) ?? [];
     documentHistory.push(streamEvent);
     history.set(documentId, documentHistory);
@@ -38,27 +46,31 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
     job.state = "running";
     repository.updateDocument(job.documentId, { status: "processing" });
     try {
-      const plan: RecoveryPlan = await runner(job.documentId, (event) =>
+      const result = await runner(job.documentId, (event) =>
         publish(job.documentId, event)
       );
+      if (isStructuredAiError(result)) throw result;
+      const plan: RecoveryPlan = result;
       repository.savePlan(job.documentId, plan);
       job.state = "completed";
       events.emit(`${job.documentId}:complete`, plan);
     } catch (error) {
+      const publicError = sanitizeAiError(error);
       job.attempts += 1;
-      if (job.attempts < 3) {
+      if (publicError.retryable && job.attempts < 3) {
         await delay(25 * 2 ** (job.attempts - 1));
         await run(job);
         return;
       }
       job.state = "failed";
-      job.error = error instanceof Error ? error.message : "Pipeline failed";
+      job.errorCode = publicError.code;
       deadLetterQueue.set(job.documentId, { ...job });
-      const failureMessage =
-        `We couldn't confirm the discharge instructions. Please check the original document at ` +
-        `/documents/${job.documentId}/original.`;
-      repository.updateDocument(job.documentId, { status: "failed", failureMessage });
-      events.emit(`${job.documentId}:failed`, failureMessage);
+      repository.updateDocument(job.documentId, {
+        status: "failed",
+        failure: publicError,
+        failureOriginalDocumentUrl: `/documents/${job.documentId}/original`
+      });
+      events.emit(`${job.documentId}:failed`, publicError);
     }
   }
 
@@ -78,7 +90,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
       events.on(`${documentId}:complete`, listener);
       return () => events.off(`${documentId}:complete`, listener);
     },
-    onFailure(documentId: string, listener: (message: string) => void) {
+    onFailure(documentId: string, listener: (error: StructuredAiError) => void) {
       events.on(`${documentId}:failed`, listener);
       return () => events.off(`${documentId}:failed`, listener);
     },

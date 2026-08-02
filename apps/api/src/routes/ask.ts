@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { repository } from "../db/repository.js";
+import { isStructuredAiError, toAiApiError } from "../errors.js";
 import { askGrounded } from "../pipeline/ask.js";
 
 const bodySchema = z.object({
@@ -10,7 +11,7 @@ const bodySchema = z.object({
 
 export const askRouter = Router();
 
-askRouter.post("/", async (req, res) => {
+askRouter.post("/", async (req, res, next) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "A question and valid documentId are required." });
@@ -22,6 +23,14 @@ askRouter.post("/", async (req, res) => {
     return;
   }
 
-  const answer = await askGrounded(parsed.data);
-  res.json(answer);
+  try {
+    const answer = await askGrounded(parsed.data);
+    if (isStructuredAiError(answer)) {
+      next(toAiApiError(answer));
+      return;
+    }
+    res.json(answer);
+  } catch (error) {
+    next(toAiApiError(error));
+  }
 });

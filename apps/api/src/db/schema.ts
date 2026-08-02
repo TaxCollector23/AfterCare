@@ -1,4 +1,9 @@
-import type { Appointment, Medication, RecoveryPlan } from "@discharge-guide/shared-types";
+import type {
+  Appointment,
+  Medication,
+  RecoveryPlan,
+  StructuredAiError
+} from "@discharge-guide/shared-types";
 
 export interface UserRecord {
   id: string;
@@ -24,7 +29,8 @@ export interface DocumentRecord {
   storageKey: string;
   uploadedAt: string;
   status: "uploaded" | "processing" | "ready" | "failed";
-  failureMessage?: string;
+  failure?: StructuredAiError;
+  failureOriginalDocumentUrl?: string;
   plan?: RecoveryPlan;
 }
 

@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS documents (
   file_hash text NOT NULL,
   storage_key text NOT NULL,
   status text NOT NULL CHECK (status IN ('uploaded', 'processing', 'ready', 'failed')),
-  failure_message text,
+  failure jsonb,
+  failure_original_document_url text,
   uploaded_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (user_id, file_hash)
 );

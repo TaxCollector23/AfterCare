@@ -65,7 +65,7 @@ export interface PipelineEvent {
   stage: PipelineStage;
   status: "started" | "completed" | "failed";
   data: unknown;
-  error?: string;
+  error?: StructuredAiError;
 }
 
 export type PipelineEmit = (event: PipelineEvent) => void;
@@ -83,3 +83,17 @@ export interface AskGroundedResult {
     sourceLines: number[];
   };
 }
+
+export type AiErrorCode =
+  | "AI_PROVIDER_CONFIG_MISSING"
+  | "AI_PROVIDER_OUTAGE"
+  | "AI_PROVIDER_UNAVAILABLE"
+  | "AI_VALIDATION_FAILED";
+
+export interface StructuredAiError {
+  code: AiErrorCode;
+  message: string;
+  retryable: boolean;
+}
+
+export type AiFunctionResult<T> = T | StructuredAiError;
