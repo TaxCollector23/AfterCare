@@ -1,14 +1,14 @@
 /**
  * LLM client wrapper used by every pipeline stage.
  *
- * 3-provider fallback waterfall: OpenAI -> Gemini (key 1) -> Gemini (key 2).
+ * Multi-provider fallback waterfall: OpenAI -> Gemini (3 keys) -> OpenRouter (2 keys) -> Anthropic (2 keys).
  * Each provider gets its own retry/backoff; if a provider's retries are
  * exhausted (or it's not configured — missing API key), the waterfall moves
  * to the next one. Only throws once every configured provider has failed.
  *
- * Env vars: OPENAI_API_KEY (required for tier 1), GEMINI_API_KEY (tier 2),
- * GEMINI_API_KEY_2 (tier 3). A tier with no key set is skipped, not treated
- * as an error, so this also works with just OpenAI configured.
+ * Env vars: OPENAI_API_KEY, GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3,
+ * OPENROUTER_API_KEY, OPENROUTER_API_KEY_2, ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2.
+ * Any tier with no key set is skipped, not treated as an error.
  */
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -35,12 +35,41 @@ function getOpenAI(): OpenAI | null {
   return openaiClient;
 }
 
-const geminiClients: [GoogleGenerativeAI | null, GoogleGenerativeAI | null] = [null, null];
-function getGemini(tier: 0 | 1): GoogleGenerativeAI | null {
-  const apiKey = process.env[tier === 0 ? 'GEMINI_API_KEY' : 'GEMINI_API_KEY_2'];
+const geminiClients: [GoogleGenerativeAI | null, GoogleGenerativeAI | null, GoogleGenerativeAI | null] = [null, null, null];
+function getGemini(tier: 0 | 1 | 2): GoogleGenerativeAI | null {
+  const keyNames = ['GEMINI_API_KEY', 'GEMINI_API_KEY_2', 'GEMINI_API_KEY_3'];
+  const apiKey = process.env[keyNames[tier]];
   if (!apiKey) return null;
   if (!geminiClients[tier]) geminiClients[tier] = new GoogleGenerativeAI(apiKey);
   return geminiClients[tier];
+}
+
+const openrouterClients: [OpenAI | null, OpenAI | null] = [null, null];
+function getOpenRouter(tier: 0 | 1): OpenAI | null {
+  const keyNames = ['OPENROUTER_API_KEY', 'OPENROUTER_API_KEY_2'];
+  const apiKey = process.env[keyNames[tier]];
+  if (!apiKey) return null;
+  if (!openrouterClients[tier]) {
+    openrouterClients[tier] = new OpenAI({
+      apiKey,
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+  }
+  return openrouterClients[tier];
+}
+
+const anthropicClients: [OpenAI | null, OpenAI | null] = [null, null];
+function getAnthropic(tier: 0 | 1): OpenAI | null {
+  const keyNames = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2'];
+  const apiKey = process.env[keyNames[tier]];
+  if (!apiKey) return null;
+  if (!anthropicClients[tier]) {
+    anthropicClients[tier] = new OpenAI({
+      apiKey,
+      baseURL: 'https://api.anthropic.com/v1',
+    });
+  }
+  return anthropicClients[tier];
 }
 
 function isRetryableStatus(status: number | undefined): boolean {
@@ -140,9 +169,10 @@ async function openaiJson(system: string, user: string, model: string, maxRetrie
   }, maxRetries);
 }
 
-async function geminiJson(tier: 0 | 1, system: string, user: string, maxRetries?: number): Promise<string> {
+async function geminiJson(tier: 0 | 1 | 2, system: string, user: string, maxRetries?: number): Promise<string> {
   const client = getGemini(tier);
-  if (!client) throw new Error(`GEMINI_API_KEY${tier === 1 ? '_2' : ''} not set`);
+  const keyName = tier === 0 ? 'GEMINI_API_KEY' : `GEMINI_API_KEY_${tier + 1}`;
+  if (!client) throw new Error(`${keyName} not set`);
   return withRetry(async () => {
     const model = client.getGenerativeModel({
       model: GEMINI_MODEL,
@@ -151,7 +181,7 @@ async function geminiJson(tier: 0 | 1, system: string, user: string, maxRetries?
     });
     const result = await model.generateContent(user);
     const text = result.response.text();
-    if (!text) throw new Error('Gemini returned an empty response');
+    if (!text || typeof text !== 'string') throw new Error('Gemini returned an empty or invalid response');
     return text;
   }, maxRetries);
 }
@@ -169,6 +199,11 @@ export async function callJson<T = unknown>(opts: JsonCallOptions): Promise<T> {
   if (getOpenAI()) attempts.push({ name: 'openai', run: () => openaiJson(fullSystem, user, model, maxRetries) });
   if (getGemini(0)) attempts.push({ name: 'gemini-1', run: () => geminiJson(0, fullSystem, user, maxRetries) });
   if (getGemini(1)) attempts.push({ name: 'gemini-2', run: () => geminiJson(1, fullSystem, user, maxRetries) });
+  if (getGemini(2)) attempts.push({ name: 'gemini-3', run: () => geminiJson(2, fullSystem, user, maxRetries) });
+  if (getOpenRouter(0)) attempts.push({ name: 'openrouter-1', run: () => openaiJson(fullSystem, user, model, maxRetries) });
+  if (getOpenRouter(1)) attempts.push({ name: 'openrouter-2', run: () => openaiJson(fullSystem, user, model, maxRetries) });
+  if (getAnthropic(0)) attempts.push({ name: 'anthropic-1', run: () => openaiJson(fullSystem, user, model, maxRetries) });
+  if (getAnthropic(1)) attempts.push({ name: 'anthropic-2', run: () => openaiJson(fullSystem, user, model, maxRetries) });
 
   const raw = await runWaterfall(attempts);
   try {
@@ -205,9 +240,10 @@ async function openaiVision(buffer: Buffer, mimeType: string): Promise<string> {
   });
 }
 
-async function geminiVision(tier: 0 | 1, buffer: Buffer, mimeType: string): Promise<string> {
+async function geminiVision(tier: 0 | 1 | 2, buffer: Buffer, mimeType: string): Promise<string> {
   const client = getGemini(tier);
-  if (!client) throw new Error(`GEMINI_API_KEY${tier === 1 ? '_2' : ''} not set`);
+  const keyName = tier === 0 ? 'GEMINI_API_KEY' : `GEMINI_API_KEY_${tier + 1}`;
+  if (!client) throw new Error(`${keyName} not set`);
   return withRetry(async () => {
     const model = client.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent([
@@ -242,6 +278,7 @@ export async function visionTranscribe(buffer: Buffer, mimeType: string): Promis
   if (getOpenAI()) attempts.push({ name: 'openai', run: () => openaiVision(buffer, mimeType) });
   if (getGemini(0)) attempts.push({ name: 'gemini-1', run: () => geminiVision(0, buffer, mimeType) });
   if (getGemini(1)) attempts.push({ name: 'gemini-2', run: () => geminiVision(1, buffer, mimeType) });
+  if (getGemini(2)) attempts.push({ name: 'gemini-3', run: () => geminiVision(2, buffer, mimeType) });
 
   return runWaterfall(attempts);
 }
