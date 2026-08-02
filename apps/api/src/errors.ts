@@ -1,7 +1,4 @@
-import type {
-  AiErrorCode,
-  StructuredAiError,
-} from "@discharge-guide/shared-types";
+import type { AiErrorCode, StructuredAiError } from "@discharge/shared-types";
 
 export class AppError extends Error {
   constructor(

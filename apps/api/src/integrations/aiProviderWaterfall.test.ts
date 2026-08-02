@@ -16,7 +16,7 @@ const success = { value: "grounded result" };
 
 describe("AI provider waterfall", () => {
   it("stops after OpenAI succeeds", async () => {
-    const operation = vi.fn(async () => success);
+    const operation = vi.fn(async (_context: AiProviderContext) => success);
 
     await expect(runAiProviderWaterfall(operation, credentials)).resolves.toBe(
       success,
@@ -73,7 +73,7 @@ describe("AI provider waterfall", () => {
   });
 
   it("skips missing OpenAI credentials and starts with Gemini primary", async () => {
-    const operation = vi.fn(async () => success);
+    const operation = vi.fn(async (_context: AiProviderContext) => success);
 
     await runAiProviderWaterfall(operation, {
       geminiPrimary: credentials.geminiPrimary,

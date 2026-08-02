@@ -2,7 +2,7 @@ import type {
   PipelineEvent,
   RecoveryPlan,
   StructuredAiError,
-} from "@discharge-guide/shared-types";
+} from "@discharge/shared-types";
 import { EventEmitter } from "node:events";
 import { repository } from "../db/repository.js";
 import { isStructuredAiError, sanitizeAiError } from "../errors.js";

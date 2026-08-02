@@ -2,7 +2,7 @@ import type {
   Appointment,
   Medication,
   RecoveryPlan,
-} from "@discharge-guide/shared-types";
+} from "@discharge/shared-types";
 import { randomUUID } from "node:crypto";
 import type {
   AccessibilityPreferences,
@@ -61,6 +61,9 @@ export const repository = {
   findDocument(documentId: string, userId: string) {
     const document = state.documents.get(documentId);
     return document?.userId === userId ? document : undefined;
+  },
+  findDocumentById(documentId: string) {
+    return state.documents.get(documentId);
   },
   findDocumentByHash(fileHash: string, userId: string) {
     return [...state.documents.values()].find(

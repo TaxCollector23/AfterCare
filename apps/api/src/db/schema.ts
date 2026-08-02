@@ -3,7 +3,7 @@ import type {
   Medication,
   RecoveryPlan,
   StructuredAiError,
-} from "@discharge-guide/shared-types";
+} from "@discharge/shared-types";
 
 export interface UserRecord {
   id: string;

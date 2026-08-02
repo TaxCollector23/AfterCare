@@ -22,6 +22,13 @@ appointmentsRouter.post("/:appointmentId/calendar", (req, res) => {
     res.status(404).json({ error: "Appointment not found" });
     return;
   }
+  if (!appointment.date) {
+    res.status(422).json({
+      error: "Appointment does not have a confirmed calendar date",
+      code: "APPOINTMENT_DATE_UNCONFIRMED",
+    });
+    return;
+  }
 
   const date = appointment.date.replaceAll(/[-:]/g, "").replace(".000Z", "Z");
   const ics = [

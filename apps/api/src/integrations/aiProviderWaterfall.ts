@@ -1,7 +1,7 @@
 import type {
   AiFunctionResult,
   StructuredAiError,
-} from "@discharge-guide/shared-types";
+} from "@discharge/shared-types";
 import { config } from "../config.js";
 
 export type AiProviderSlot = "openai" | "gemini_primary" | "gemini_fallback";
