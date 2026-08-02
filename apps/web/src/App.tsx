@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+import { migrateLocalDocuments } from "./services/documents";
 import { AccessibilityProvider } from "./hooks/useAccessibility";
 import { ReadAloudButton } from "./components/ReadAloudButton";
 import { BottomNav } from "./components/BottomNav/BottomNav";
@@ -62,7 +64,15 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const { user, needsSignIn } = useAuth();
+  const { user, mode, needsSignIn } = useAuth();
+
+  // Documents added while the backend was asleep live only in this browser.
+  // Send them on as soon as there is a backend and an account to attach them
+  // to — including when the mode upgrades mid-session.
+  useEffect(() => {
+    if (mode !== "backend" || !user || user.isLocal) return;
+    void migrateLocalDocuments(user);
+  }, [mode, user]);
 
   return (
     <AccessibilityProvider>
