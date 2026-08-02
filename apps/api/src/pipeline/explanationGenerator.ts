@@ -47,19 +47,20 @@ export async function generateExplanations(ocr: OcrResult): Promise<StageResult<
       const sourceLines = Array.isArray(e.sourceLines)
         ? e.sourceLines.filter((n) => validLines.has(n))
         : [];
+      const rawConfidence = Math.max(0, Math.min(100, e.confidence ?? 0));
       return {
         id: randomUUID(),
         term: e.term ?? '',
         plainText: e.plainText ?? '',
         sourceLines,
-        confidence: sourceLines.length > 0 ? (e.confidence ?? 0) : Math.min(e.confidence ?? 0, 50),
+        confidence: sourceLines.length > 0 ? rawConfidence : Math.min(rawConfidence, 50),
       };
     });
 
     const overall =
       result.length === 0
         ? 100
-        : Math.round(result.reduce((sum, e) => sum + e.confidence, 0) / result.length);
+        : Math.round(Math.max(0, Math.min(100, result.reduce((sum, e) => sum + e.confidence, 0) / result.length)));
 
     return ok(result, overall, result.flatMap((e) => e.sourceLines));
   } catch (err) {

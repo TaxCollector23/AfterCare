@@ -57,7 +57,13 @@ function normalize(raw: Partial<Record<keyof ExtractedSections, unknown>>): Extr
 
 export async function runExtraction(ocr: OcrResult): Promise<StageResult<ExtractedSections>> {
   try {
+    if (ocr.lines.length === 0) {
+      return fail('OCR produced no text to extract');
+    }
     const numberedText = ocr.lines.map((l) => `${l.line}: ${l.text}`).join('\n');
+    if (numberedText.trim().length === 0) {
+      return fail('OCR text is empty after formatting');
+    }
     const raw = await callJson<Partial<Record<keyof ExtractedSections, unknown>>>({
       system: SYSTEM_PROMPT,
       user: numberedText,

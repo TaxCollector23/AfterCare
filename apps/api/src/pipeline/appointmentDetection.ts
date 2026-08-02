@@ -55,6 +55,7 @@ export async function detectAppointments(
       const sourceLines = Array.isArray(a.sourceLines)
         ? a.sourceLines.filter((n) => validLines.has(n))
         : [];
+      const rawConfidence = Math.max(0, Math.min(100, a.confidence ?? 0));
       return {
         id: randomUUID(),
         date: a.date ?? null,
@@ -64,14 +65,14 @@ export async function detectAppointments(
         location: a.location ?? '',
         notes: a.notes ?? '',
         sourceLines,
-        confidence: sourceLines.length > 0 ? (a.confidence ?? 0) : Math.min(a.confidence ?? 0, 50),
+        confidence: sourceLines.length > 0 ? rawConfidence : Math.min(rawConfidence, 50),
       };
     });
 
     const overall =
       result.length === 0
         ? 100
-        : Math.round(result.reduce((sum, a) => sum + a.confidence, 0) / result.length);
+        : Math.round(Math.max(0, Math.min(100, result.reduce((sum, a) => sum + a.confidence, 0) / result.length)));
 
     return ok(result, overall, result.flatMap((a) => a.sourceLines));
   } catch (err) {

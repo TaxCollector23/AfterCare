@@ -52,6 +52,7 @@ export async function detectWarnings(
       const sourceLines = Array.isArray(w.sourceLines)
         ? w.sourceLines.filter((n) => validLines.has(n))
         : [];
+      const rawConfidence = Math.max(0, Math.min(100, w.confidence ?? 0));
       return {
         id: randomUUID(),
         symptom: w.symptom ?? '',
@@ -60,14 +61,14 @@ export async function detectWarnings(
         // a false emergency is far cheaper than a missed one.
         severity: w.severity === 'call-doctor' ? 'call-doctor' : 'emergency',
         sourceLines,
-        confidence: sourceLines.length > 0 ? (w.confidence ?? 0) : Math.min(w.confidence ?? 0, 50),
+        confidence: sourceLines.length > 0 ? rawConfidence : Math.min(rawConfidence, 50),
       };
     });
 
     const overall =
       result.length === 0
         ? 100
-        : Math.round(result.reduce((sum, w) => sum + w.confidence, 0) / result.length);
+        : Math.round(Math.max(0, Math.min(100, result.reduce((sum, w) => sum + w.confidence, 0) / result.length)));
 
     return ok(result, overall, result.flatMap((w) => w.sourceLines));
   } catch (err) {

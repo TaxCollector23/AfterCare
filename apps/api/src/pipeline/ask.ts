@@ -45,7 +45,7 @@ export async function askGrounded(
 
   const answer: GroundedAnswer = {
     answer: raw.answer ?? '',
-    confidence: raw.confidence ?? 0,
+    confidence: Math.max(0, Math.min(100, raw.confidence ?? 0)),
     source: VALID_SOURCES.includes(raw.source as GroundedAnswer['source']) ? raw.source! : 'not-found',
     // Drop any cited line that doesn't actually exist, regardless of source.
     sourceLines: Array.isArray(raw.sourceLines) ? raw.sourceLines.filter((n) => validLines.has(n)) : [],
@@ -59,6 +59,16 @@ export async function askGrounded(
       confidence: Math.min(answer.confidence, CONFIDENCE_THRESHOLD - 1),
       sourceLines: [],
       source: 'general',
+    };
+  }
+
+  // If answer is empty, we can't trust it regardless of source
+  if (!answer.answer.trim()) {
+    return {
+      answer: 'Unable to generate an answer.',
+      confidence: 0,
+      sourceLines: [],
+      source: 'not-found',
     };
   }
 

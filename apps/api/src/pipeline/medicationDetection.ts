@@ -57,6 +57,7 @@ export async function detectMedications(
       const sourceLines = Array.isArray(m.sourceLines)
         ? m.sourceLines.filter((n) => validLines.has(n))
         : [];
+      const rawConfidence = Math.max(0, Math.min(100, m.confidence ?? 0));
       return {
         id: randomUUID(),
         name: m.name ?? '',
@@ -67,14 +68,14 @@ export async function detectMedications(
         sourceLines,
         // An ungrounded citation (hallucinated line numbers) can't be trusted
         // at face value — cap confidence rather than dropping the finding.
-        confidence: sourceLines.length > 0 ? (m.confidence ?? 0) : Math.min(m.confidence ?? 0, 50),
+        confidence: sourceLines.length > 0 ? rawConfidence : Math.min(rawConfidence, 50),
       };
     });
 
     const overall =
       result.length === 0
         ? 100
-        : Math.round(result.reduce((sum, m) => sum + m.confidence, 0) / result.length);
+        : Math.round(Math.max(0, Math.min(100, result.reduce((sum, m) => sum + m.confidence, 0) / result.length)));
 
     return ok(result, overall, result.flatMap((m) => m.sourceLines));
   } catch (err) {

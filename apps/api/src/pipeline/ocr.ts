@@ -34,6 +34,9 @@ const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image
 /** Minimum characters per PDF page before we trust the text layer over vision fallback. */
 const MIN_CHARS_PER_PAGE = 20;
 
+/** Maximum file size: 100 MB. Prevents memory exhaustion from malicious/corrupted files. */
+const MAX_BUFFER_SIZE = 100 * 1024 * 1024;
+
 /** Higher = sharper rasterized pages = better OCR accuracy, at the cost of larger vision payloads. */
 const RASTER_SCALE = Number(process.env.PDF_OCR_RASTER_SCALE ?? 2);
 
@@ -89,6 +92,10 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractResult> {
       visionTranscribe(pageImage, 'image/png'),
     );
 
+    if (!pageTexts.some((text) => text.trim().length > 0)) {
+      throw new Error('Vision transcription returned no readable text from any page');
+    }
+
     return { text: pageTexts.join('\n'), pageCount: pageImages.length, source: 'vision' };
   } finally {
     await doc.destroy();
@@ -101,6 +108,9 @@ async function extractFromImage(buffer: Buffer, mimeType: string): Promise<Extra
 }
 
 async function extractRawText(input: OcrInput): Promise<ExtractResult> {
+  if (input.buffer.length > MAX_BUFFER_SIZE) {
+    throw new Error(`File too large: ${(input.buffer.length / 1024 / 1024).toFixed(1)}MB exceeds limit of 100MB`);
+  }
   if (input.mimeType === 'application/pdf') {
     return extractFromPdf(input.buffer);
   }
