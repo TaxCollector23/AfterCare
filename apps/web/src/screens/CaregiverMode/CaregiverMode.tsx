@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../hooks/useAuth";
-import { addCaregiverEmail } from "../../services/firestore";
-import { doc, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebase";
-import { useEffect } from "react";
+import { currentMode } from "../../services/config";
+
+const LOCAL_KEY = "aftercare:caregivers";
+
+function readLocal(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(LOCAL_KEY) ?? "[]") as string[];
+  } catch {
+    return [];
+  }
+}
 
 export default function CaregiverMode() {
   const { user } = useAuth();
@@ -13,25 +20,54 @@ export default function CaregiverMode() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  const syncedToAccount = currentMode() === "firebase" && user && !user.isLocal;
+
   useEffect(() => {
     if (!user) return;
-    return onSnapshot(doc(db, "users", user.uid), (snap) => {
-      setCaregivers((snap.data()?.caregiverEmails as string[]) ?? []);
-    });
-  }, [user]);
+    if (!syncedToAccount) {
+      setCaregivers(readLocal());
+      return;
+    }
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    (async () => {
+      try {
+        const { doc, onSnapshot } = await import("firebase/firestore");
+        const { db } = await import("../../firebase");
+        if (cancelled) return;
+        unsubscribe = onSnapshot(doc(db, "users", user.uid), (snap) => {
+          setCaregivers((snap.data()?.caregiverEmails as string[]) ?? []);
+        });
+      } catch {
+        setCaregivers(readLocal());
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [user, syncedToAccount]);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (!user || !email.trim()) return;
+    const value = email.trim().toLowerCase();
+    if (!user || !value) return;
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
-      await addCaregiverEmail(user.uid, email.trim());
-      setInfo(`${email.trim()} can now sign in and view this recovery guide as read-only.`);
+      if (syncedToAccount) {
+        const { addCaregiverEmail } = await import("../../services/firestore");
+        await addCaregiverEmail(user.uid, value);
+      } else {
+        const next = Array.from(new Set([...readLocal(), value]));
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(next));
+        setCaregivers(next);
+      }
+      setInfo(`${value} was added to your care circle.`);
       setEmail("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't add that caregiver.");
+      setError(err instanceof Error ? err.message : "Couldn't add that person.");
     } finally {
       setBusy(false);
     }
@@ -41,13 +77,15 @@ export default function CaregiverMode() {
     <div>
       <h1>Caregiver access</h1>
       <p className="gloss measure">
-        Share read-only access to this recovery guide with a family member or caregiver. They'll need to
-        create their own AfterCare account with the same email address to view it.
+        Keep track of the family members and caregivers helping with your recovery.
+        {syncedToAccount
+          ? " They can sign in with the same email to view this guide."
+          : " This list is kept on this device."}
       </p>
 
       <form onSubmit={handleAdd} className="card" style={{ marginBottom: "var(--sp4)" }}>
         <div className="field">
-          <label htmlFor="caregiver-email">Caregiver's email</label>
+          <label htmlFor="caregiver-email">Caregiver&rsquo;s email</label>
           <input
             id="caregiver-email"
             type="email"
@@ -65,13 +103,13 @@ export default function CaregiverMode() {
         )}
         <button className="btn btn-solid" disabled={busy}>
           {busy && <span className="spinner" style={{ marginRight: 8 }} />}
-          Grant access
+          Add caregiver
         </button>
       </form>
 
-      <h2>People with access</h2>
+      <h2>Your care circle</h2>
       {caregivers.length === 0 ? (
-        <p className="gloss">Only you can see this recovery guide right now.</p>
+        <p className="gloss">No one added yet.</p>
       ) : (
         <ul style={{ listStyle: "none", padding: 0 }}>
           {caregivers.map((c) => (
