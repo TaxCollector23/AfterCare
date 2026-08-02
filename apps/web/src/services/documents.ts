@@ -19,22 +19,24 @@ import {
 import type { AppUser } from "./session";
 import type { RecoveryData, UploadedDocument } from "../types";
 
+// Kept in step with the API's upload filter (apps/api/src/routes/upload.ts) and
+// the OCR pipeline's IMAGE_MIME_TYPES. HEIC is deliberately absent: neither can
+// read it, so accepting it here only moves the failure to after the upload.
+// iOS Safari hands over a JPEG for both camera capture and library picks.
 const MAX_BYTES = 20 * 1024 * 1024;
 const ACCEPTED = [
   "application/pdf",
   "image/jpeg",
   "image/jpg",
   "image/png",
-  "image/heic",
-  "image/heif",
   "image/webp",
 ];
-const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"];
+const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
 
 export function validateFile(file: File): void {
   const name = file.name.toLowerCase();
   const ok = ACCEPTED.includes(file.type) || ACCEPTED_EXT.some((e) => name.endsWith(e));
-  if (!ok) throw new Error("Please choose a PDF or a photo (JPG, PNG, or HEIC).");
+  if (!ok) throw new Error("Please choose a PDF or a photo (JPG, PNG, or WebP).");
   if (file.size > MAX_BYTES) {
     throw new Error("That file is over 20MB. Try a smaller scan or a lower-resolution photo.");
   }

@@ -28,7 +28,33 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      # Set by hand in the dashboard, and NOT with Render's "Generate" button —
+      # that produces a random string of the wrong length. A 32-byte base64 or
+      # base64url key, a 64-character hex key, or any raw secret of 32+ bytes
+      # all work; anything shorter is refused. Generate one with:
+      #   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+      # Changing it makes already-stored documents unreadable.
+      # /health reports storage.encryption.ready: false when it is wrong.
       - key: STORAGE_ENCRYPTION_KEY
+        sync: false
+      # Without this the API runs on an in-memory store: every account and every
+      # uploaded document is lost when the free instance sleeps (~15 min idle)
+      # or redeploys. /health reports database.mode: "memory" when it is unset.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: aftercare-db
+          property: connectionString
+      # Same problem for the document bytes themselves — without a bucket they
+      # live in process memory and vanish with the instance. Set S3_BUCKET plus
+      # AWS credentials in the dashboard to persist uploads.
+      # /health reports storage.mode: "memory" when it is unset.
+      - key: S3_BUCKET
+        sync: false
+      - key: AWS_REGION
+        value: us-west-2
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
         sync: false
       - key: GOOGLE_STATE_SECRET
         generateValue: true
@@ -44,3 +70,8 @@ services:
         sync: false
       - key: AI_TIMEOUT_MS
         value: "45000"
+
+databases:
+  - name: aftercare-db
+    plan: free
+    region: oregon
