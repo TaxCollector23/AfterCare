@@ -61,8 +61,9 @@ export async function detectMedications(
 
     const result: Medication[] = medications.map((m) => {
       const sourceLines = Array.isArray(m.sourceLines)
-        ? m.sourceLines.filter((n) => validLines.has(n))
+        ? m.sourceLines.filter((n) => Number.isInteger(n) && validLines.has(n))
         : [];
+      const confidence = Math.max(0, Math.min(100, m.confidence ?? 0));
       return {
         id: randomUUID(),
         name: m.name ?? "",
@@ -74,9 +75,7 @@ export async function detectMedications(
         // An ungrounded citation (hallucinated line numbers) can't be trusted
         // at face value ? cap confidence rather than dropping the finding.
         confidence:
-          sourceLines.length > 0
-            ? (m.confidence ?? 0)
-            : Math.min(m.confidence ?? 0, 50),
+          sourceLines.length > 0 ? confidence : Math.min(confidence, 50),
       };
     });
 
