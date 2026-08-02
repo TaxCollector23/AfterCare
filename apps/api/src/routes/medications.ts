@@ -14,7 +14,10 @@ medicationsRouter.get("/", (req, res) => {
 });
 
 medicationsRouter.post("/:medicationId/taken", (req, res) => {
-  const medication = repository.findMedication(req.params.medicationId, req.userId!);
+  const medication = repository.findMedication(
+    req.params.medicationId,
+    req.userId!,
+  );
   if (!medication) {
     res.status(404).json({ error: "Medication not found" });
     return;

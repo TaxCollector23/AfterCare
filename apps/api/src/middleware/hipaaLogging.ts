@@ -8,11 +8,14 @@ export function hipaaAuditLog(req: Request, res: Response, next: NextFunction) {
       userId: req.userId,
       action: `${req.method} ${req.route?.path ?? req.path}`,
       resource: String(
-        req.params.documentId ?? req.params.medicationId ?? req.params.appointmentId ?? "api"
+        req.params.documentId ??
+          req.params.medicationId ??
+          req.params.appointmentId ??
+          "api",
       ),
       timestamp: new Date().toISOString(),
       ipAddress: req.ip ?? "0.0.0.0",
-      statusCode: res.statusCode
+      statusCode: res.statusCode,
     });
   });
   next();

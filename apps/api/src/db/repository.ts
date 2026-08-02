@@ -1,4 +1,8 @@
-import type { Appointment, Medication, RecoveryPlan } from "@discharge-guide/shared-types";
+import type {
+  Appointment,
+  Medication,
+  RecoveryPlan,
+} from "@discharge-guide/shared-types";
 import { randomUUID } from "node:crypto";
 import type {
   AccessibilityPreferences,
@@ -7,7 +11,7 @@ import type {
   DatabaseState,
   DocumentRecord,
   SessionRecord,
-  UserRecord
+  UserRecord,
 } from "./schema.js";
 
 const state: DatabaseState = {
@@ -18,21 +22,34 @@ const state: DatabaseState = {
   appointments: new Map(),
   adherence: [],
   preferences: new Map(),
-  auditLogs: []
+  auditLogs: [],
 };
 
 export const repository = {
   createUser(email: string, passwordHash: string): UserRecord {
-    const user = { id: randomUUID(), email, passwordHash, createdAt: new Date().toISOString() };
+    const user = {
+      id: randomUUID(),
+      email,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+    };
     state.users.set(user.id, user);
     return user;
   },
   findUserByEmail(email: string) {
     return [...state.users.values()].find((user) => user.email === email);
   },
-  createSession(userId: string, refreshTokenHash: string, expiresAt: string): SessionRecord {
+  createSession(
+    userId: string,
+    refreshTokenHash: string,
+    expiresAt: string,
+  ): SessionRecord {
     const session = {
-      id: randomUUID(), userId, refreshTokenHash, expiresAt, createdAt: new Date().toISOString()
+      id: randomUUID(),
+      userId,
+      refreshTokenHash,
+      expiresAt,
+      createdAt: new Date().toISOString(),
     };
     state.sessions.set(session.id, session);
     return session;
@@ -47,7 +64,8 @@ export const repository = {
   },
   findDocumentByHash(fileHash: string, userId: string) {
     return [...state.documents.values()].find(
-      (document) => document.userId === userId && document.fileHash === fileHash
+      (document) =>
+        document.userId === userId && document.fileHash === fileHash,
     );
   },
   updateDocument(documentId: string, patch: Partial<DocumentRecord>) {
@@ -61,32 +79,48 @@ export const repository = {
     if (!document) return;
     document.plan = plan;
     document.status = "ready";
-    for (const medication of plan.medications) state.medications.set(medication.id, medication);
-    for (const appointment of plan.appointments) state.appointments.set(appointment.id, appointment);
+    for (const medication of plan.medications)
+      state.medications.set(medication.id, medication);
+    for (const appointment of plan.appointments)
+      state.appointments.set(appointment.id, appointment);
   },
-  listMedications(documentId: string, userId: string): Medication[] | undefined {
+  listMedications(
+    documentId: string,
+    userId: string,
+  ): Medication[] | undefined {
     return this.findDocument(documentId, userId)?.plan?.medications;
   },
   findMedication(medicationId: string, userId: string) {
     for (const document of state.documents.values()) {
       if (document.userId !== userId) continue;
-      const medication = document.plan?.medications.find(({ id }) => id === medicationId);
+      const medication = document.plan?.medications.find(
+        ({ id }) => id === medicationId,
+      );
       if (medication) return medication;
     }
     return undefined;
   },
-  recordTaken(medicationId: string, userId: string, takenAt: string): AdherenceRecord {
+  recordTaken(
+    medicationId: string,
+    userId: string,
+    takenAt: string,
+  ): AdherenceRecord {
     const record = { id: randomUUID(), medicationId, userId, takenAt };
     state.adherence.push(record);
     return record;
   },
-  listAppointments(documentId: string, userId: string): Appointment[] | undefined {
+  listAppointments(
+    documentId: string,
+    userId: string,
+  ): Appointment[] | undefined {
     return this.findDocument(documentId, userId)?.plan?.appointments;
   },
   findAppointment(appointmentId: string, userId: string) {
     for (const document of state.documents.values()) {
       if (document.userId !== userId) continue;
-      const appointment = document.plan?.appointments.find(({ id }) => id === appointmentId);
+      const appointment = document.plan?.appointments.find(
+        ({ id }) => id === appointmentId,
+      );
       if (appointment) return appointment;
     }
     return undefined;
@@ -113,5 +147,5 @@ export const repository = {
     state.preferences.clear();
     state.auditLogs.length = 0;
   },
-  inspect: () => state
+  inspect: () => state,
 };

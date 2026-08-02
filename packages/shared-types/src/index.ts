@@ -1,4 +1,5 @@
-export type PipelineStage = "ocr" | "extract" | "meds" | "appts" | "warnings" | "timeline" | "explain";
+export type PipelineStage =
+  "ocr" | "extract" | "meds" | "appts" | "warnings" | "timeline" | "explain";
 
 export interface GroundedResult<T> {
   success: boolean;

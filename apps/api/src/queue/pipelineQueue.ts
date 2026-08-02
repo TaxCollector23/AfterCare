@@ -1,4 +1,8 @@
-import type { PipelineEvent, RecoveryPlan, StructuredAiError } from "@discharge-guide/shared-types";
+import type {
+  PipelineEvent,
+  RecoveryPlan,
+  StructuredAiError,
+} from "@discharge-guide/shared-types";
 import { EventEmitter } from "node:events";
 import { repository } from "../db/repository.js";
 import { isStructuredAiError, sanitizeAiError } from "../errors.js";
@@ -16,7 +20,8 @@ interface QueueJob {
   errorCode?: string;
 }
 
-const delay = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const delay = (milliseconds: number) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 type PipelineRunner = typeof runPipeline;
 
@@ -34,7 +39,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
         ? { error: sanitizeAiError(event.error), data: null }
         : {}),
       documentId,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     };
     const documentHistory = history.get(documentId) ?? [];
     documentHistory.push(streamEvent);
@@ -47,7 +52,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
     repository.updateDocument(job.documentId, { status: "processing" });
     try {
       const result = await runner(job.documentId, (event) =>
-        publish(job.documentId, event)
+        publish(job.documentId, event),
       );
       if (isStructuredAiError(result)) throw result;
       const plan: RecoveryPlan = result;
@@ -68,7 +73,7 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
       repository.updateDocument(job.documentId, {
         status: "failed",
         failure: publicError,
-        failureOriginalDocumentUrl: `/documents/${job.documentId}/original`
+        failureOriginalDocumentUrl: `/documents/${job.documentId}/original`,
       });
       events.emit(`${job.documentId}:failed`, publicError);
     }
@@ -90,7 +95,10 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
       events.on(`${documentId}:complete`, listener);
       return () => events.off(`${documentId}:complete`, listener);
     },
-    onFailure(documentId: string, listener: (error: StructuredAiError) => void) {
+    onFailure(
+      documentId: string,
+      listener: (error: StructuredAiError) => void,
+    ) {
       events.on(`${documentId}:failed`, listener);
       return () => events.off(`${documentId}:failed`, listener);
     },
@@ -103,13 +111,21 @@ export function createPipelineQueue(runner: PipelineRunner = runPipeline) {
     getDeadLetter(documentId: string) {
       return deadLetterQueue.get(documentId);
     },
+    listenerCount(documentId: string) {
+      return (
+        events.listenerCount(documentId) +
+        events.listenerCount(`${documentId}:complete`) +
+        events.listenerCount(`${documentId}:failed`)
+      );
+    },
     reset() {
       events.removeAllListeners();
       history.clear();
       jobs.clear();
       deadLetterQueue.clear();
-    }
+    },
   };
 }
 
+export type PipelineQueue = ReturnType<typeof createPipelineQueue>;
 export const pipelineQueue = createPipelineQueue();

@@ -14,7 +14,10 @@ appointmentsRouter.get("/", (req, res) => {
 });
 
 appointmentsRouter.post("/:appointmentId/calendar", (req, res) => {
-  const appointment = repository.findAppointment(req.params.appointmentId, req.userId!);
+  const appointment = repository.findAppointment(
+    req.params.appointmentId,
+    req.userId!,
+  );
   if (!appointment) {
     res.status(404).json({ error: "Appointment not found" });
     return;
@@ -31,7 +34,7 @@ appointmentsRouter.post("/:appointmentId/calendar", (req, res) => {
     `SUMMARY:${appointment.specialty} appointment`,
     `LOCATION:${appointment.location}`,
     "END:VEVENT",
-    "END:VCALENDAR"
+    "END:VCALENDAR",
   ].join("\r\n");
   res.type("text/calendar").attachment("appointment.ics").send(ics);
 });
