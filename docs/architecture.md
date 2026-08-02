@@ -58,6 +58,16 @@ Verdicts for ids the pipeline never emitted are ignored, missing verdicts defaul
 `review`, and a judge failure degrades gracefully (original findings are kept). A
 dedicated judge model can be set with `JUDGE_MODEL` (defaults to the main text model).
 
+### Ops & performance
+
+- `GET /health` reports which AI providers are configured in the waterfall
+  (`ai.waterfall`, booleans only — never keys) and the `AI_TIMEOUT_MS` value.
+- `GEMINI_FALLBACK_MODEL` lets the Gemini fallback slot use a cheaper model
+  (e.g. `gemini-2.5-flash-lite`) while the primary slot keeps the full model.
+- `/ask` reuses a short-TTL, process-local OCR cache keyed by file hash, so
+  follow-up questions on the same document skip re-running OCR (expensive for
+  scanned PDFs). Only successful OCR results are cached.
+
 ## Local development
 
 ```bash

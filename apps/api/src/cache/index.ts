@@ -127,6 +127,67 @@ export function cacheExplanations<T>(
   );
 }
 
+/**
+ * Process-local OCR cache.
+ *
+ * Unlike the Redis-backed stage caches, this works even without REDIS_URL
+ * (the default local state) and is intentionally short-TTL so a re-uploaded
+ * document gets fresh OCR quickly. It exists so grounded Q&A (`/ask`) does
+ * not re-run OCR on every question for the same document.
+ */
+const OCR_CACHE_TTL_MS = 10 * 60 * 1_000;
+/** Hard cap so a long-running process can't accumulate OCR text forever. */
+const OCR_CACHE_MAX_ENTRIES = 500;
+const ocrCache = new Map<string, { value: unknown; expiresAt: number }>();
+
+export function ocrCacheKey(fileHash: string): string {
+  return `ocr:${fileHash}`;
+}
+
+/** Current size of the process-local OCR cache (for tests/ops). */
+export function ocrCacheSize(): number {
+  return ocrCache.size;
+}
+
+/** Keeps the map bounded: drop expired entries, then evict the oldest if still over cap. */
+function sweepOcrCache(now: number): void {
+  if (ocrCache.size < OCR_CACHE_MAX_ENTRIES) return;
+  for (const [key, entry] of ocrCache) {
+    if (entry.expiresAt <= now) ocrCache.delete(key);
+  }
+  while (ocrCache.size >= OCR_CACHE_MAX_ENTRIES) {
+    const oldest = ocrCache.keys().next().value;
+    if (oldest === undefined) break;
+    ocrCache.delete(oldest);
+  }
+}
+
+/**
+ * Cache-aside wrapper for OCR results. Only values passing `shouldCache`
+ * (e.g. successful StageResults) are stored, so a transient OCR failure is
+ * not frozen for the TTL. Cache errors never surface to the caller.
+ */
+export async function cacheOcr<T>(
+  key: string,
+  compute: () => Promise<T>,
+  shouldCache: (value: T) => boolean,
+): Promise<T> {
+  const hit = ocrCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) return hit.value as T;
+  const value = await compute();
+  if (shouldCache(value)) {
+    const now = Date.now();
+    sweepOcrCache(now);
+    ocrCache.set(key, { value, expiresAt: now + OCR_CACHE_TTL_MS });
+  }
+  return value;
+}
+
+/** Clears the process-local OCR cache. Primarily for tests. */
+export function resetOcrCache(): void {
+  ocrCache.clear();
+}
+
 /** Closes the Redis connection. Call on graceful shutdown; safe to call even if never connected. */
 export async function closeCache(): Promise<void> {
   if (client) {
