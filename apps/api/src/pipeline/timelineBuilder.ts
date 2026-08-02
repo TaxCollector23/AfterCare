@@ -76,20 +76,21 @@ export async function buildTimeline(
           ? t.sourceLines.filter((n) => validLines.has(n))
           : t.sourceLines
         : [];
+      const rawConfidence = Math.max(0, Math.min(100, t.confidence ?? 0));
       return {
         id: randomUUID(),
         bucket: VALID_BUCKETS.includes(t.bucket) ? t.bucket : 'later',
         title: t.title ?? '',
         detail: t.detail ?? '',
         sourceLines,
-        confidence: sourceLines.length > 0 ? (t.confidence ?? 0) : Math.min(t.confidence ?? 0, 50),
+        confidence: sourceLines.length > 0 ? rawConfidence : Math.min(rawConfidence, 50),
       };
     });
 
     const overall =
       result.length === 0
         ? 100
-        : Math.round(result.reduce((sum, t) => sum + t.confidence, 0) / result.length);
+        : Math.round(Math.max(0, Math.min(100, result.reduce((sum, t) => sum + t.confidence, 0) / result.length)));
 
     return ok(result, overall, result.flatMap((t) => t.sourceLines));
   } catch (err) {

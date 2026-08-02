@@ -42,7 +42,15 @@ async function getJson<T>(key: string): Promise<T | null> {
   if (!c) return null;
   try {
     const raw = await c.get(key);
-    return raw ? (JSON.parse(raw) as T) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as T;
+    // Validate that the cached value has the expected shape (success flag for StageResults)
+    if (typeof parsed === 'object' && parsed !== null && 'success' in parsed) {
+      return parsed;
+    }
+    // If cached data looks corrupted, treat as miss and invalidate
+    await c.del(key).catch(() => {});
+    return null;
   } catch (err) {
     console.error(`[cache] get failed for ${key}:`, err);
     return null;
