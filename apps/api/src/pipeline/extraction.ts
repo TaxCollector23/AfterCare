@@ -55,6 +55,9 @@ function normalize(raw: Partial<Record<keyof ExtractedSections, unknown>>): Extr
   return result;
 }
 
+/** Maximum text size to send to LLM: ~1MB. Prevents runaway token costs and memory issues. */
+const MAX_TEXT_SIZE = 1024 * 1024;
+
 export async function runExtraction(ocr: OcrResult): Promise<StageResult<ExtractedSections>> {
   try {
     if (ocr.lines.length === 0) {
@@ -63,6 +66,9 @@ export async function runExtraction(ocr: OcrResult): Promise<StageResult<Extract
     const numberedText = ocr.lines.map((l) => `${l.line}: ${l.text}`).join('\n');
     if (numberedText.trim().length === 0) {
       return fail('OCR text is empty after formatting');
+    }
+    if (numberedText.length > MAX_TEXT_SIZE) {
+      return fail(`OCR text too large (${(numberedText.length / 1024 / 1024).toFixed(1)}MB > 1MB limit)`);
     }
     const raw = await callJson<Partial<Record<keyof ExtractedSections, unknown>>>({
       system: SYSTEM_PROMPT,
