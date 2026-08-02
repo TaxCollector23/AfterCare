@@ -3,9 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#f3f2f2" />
+<meta name="theme-color" content="#f3f2f2" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#1b1a1a" media="(prefers-color-scheme: dark)" />
+<!-- iOS treats these separately from the web manifest: without them, "Add to
+     Home Screen" opens in a Safari chrome instead of standalone, and the
+     status bar sits on an opaque bar rather than over the app. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="AfterCare" />
 <title>AfterCare — Understand Your Own Discharge Paperwork</title>
 <meta name="description" content="AfterCare turns your own discharge paperwork into a plain-language, read-aloud recovery guide. Informational only — always follow your care team's instructions." />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="manifest" href="/manifest.json" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">

@@ -26,10 +26,14 @@ the browser only ever talks to its own origin.
 
 ## The pipeline
 
-A document moves through seven stages, and the Processing screen streams each one
-over Server-Sent Events as it lands:
+A document moves through eight stages, and the Processing screen streams each one
+over Server-Sent Events as it lands — the progress bar is weighted by how long each
+stage actually takes, so it tracks real work rather than counting evenly:
 
-`ocr` → `extract` → `meds` → `appts` → `warnings` → `timeline` → `explain`
+`ocr` → `extract` → `meds` → `appts` → `warnings` → `timeline` → `explain` → `judge`
+
+The last stage is an independent verifier: it re-reads the source text and checks
+every extracted finding against it, dropping anything the document doesn't support.
 
 OCR and extraction are required — if either fails the run stops. The five detection
 stages degrade independently, so one unreadable section produces an empty list

@@ -5,33 +5,71 @@
   --n100:#f8f4f4;--n200:#eae7e7;--n300:#d7d3d3;--n400:#bab6b6;--n500:#9b9797;--n600:#7d7979;--n700:#605d5d;--n800:#444141;--n900:#2d2b2b;
   --a100:#e9f8ff;--a200:#cbeeff;--a300:#99e0ff;--a400:#62c5ee;--a500:#38a6cf;--a600:#1186ac;--a700:#006786;--a800:#004961;--a900:#0a303e;
   --m100:#fff1f4;--m200:#ffdee6;--m300:#ffc0d0;--m400:#ff90b1;--m500:#ff458e;--m600:#d82071;--m700:#aa0b56;--m800:#790e3d;--m900:#4b1528;
+  --level-green:#1a7f37;--level-orange:#b45309;--level-red:#c0271c;
   --sp1:5px;--sp2:10px;--sp3:15px;--sp4:20px;--sp6:30px;--sp8:40px;
   --radius:2px;
   --scale:1;
+  --line-height:1.6;
 }
 :root[data-dark="true"]{
   --color-bg:#1b1a1a; --color-surface:#242222; --color-text:#f2efef;
   --color-divider:color-mix(in srgb,#f2efef 18%,transparent);
   --n100:#2d2b2b;--n200:#3a3838;--n300:#4a4747;--n400:#5c5959;--n500:#726e6e;--n600:#8d8989;--n700:#a8a4a4;--n800:#c7c3c3;--n900:#eeeaea;
+  --level-green:#3fb950;--level-orange:#d29922;--level-red:#f2695f;
 }
-:root[data-contrast="true"]{ --color-text:#000; --color-bg:#fff; --color-divider:#000; --n700:#000; --n600:#111; }
+/* High contrast, light. Declared after the dark block, so without the paired
+   rule below it would force a light theme even with dark mode on — which is
+   what made the dark-mode toggle look broken for anyone using high contrast. */
+:root[data-contrast="true"]{ --color-text:#000; --color-bg:#fff; --color-surface:#fff; --color-divider:#000; --n700:#000; --n600:#111;
+  --level-green:#006400;--level-orange:#8a4b00;--level-red:#a80000; }
+
+/* High contrast, dark. Both settings are independent: contrast controls how
+   far apart the two colours are, dark controls which way round they go. */
+:root[data-contrast="true"][data-dark="true"]{ --color-text:#fff; --color-bg:#000; --color-surface:#000; --color-divider:#fff; --n700:#fff; --n600:#f0f0f0;
+  --color-accent:#4fd2ff; --a700:#8be3ff; --a100:#00323f; --a300:#0a5a70;
+  --m100:#3a0a1c; --m700:#ff9db5;
+  --level-green:#5ee27a;--level-orange:#ffc061;--level-red:#ff8a7a; }
 :root[data-dyslexia="true"]{ --font-body:"Comic Sans MS","Comic Sans",cursive; }
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
 .sr-only:focus{position:fixed;top:8px;left:8px;width:auto;height:auto;padding:10px 16px;background:var(--color-accent);color:#fff;z-index:100;clip:auto;}
 
 *{box-sizing:border-box;}
-html,body,#root{height:100%;}
+/* 100dvh, not 100%: iOS Safari's toolbar shrinks and grows as you scroll, and
+   a percentage height is measured against the *largest* viewport, so the page
+   sat taller than the visible area and the bottom nav drifted off-screen. */
+html,body,#root{height:100%;height:100dvh;}
+/* Stop iOS inflating body text when the phone is turned to landscape. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
 body{
   margin:0; background:var(--color-bg); color:var(--color-text);
   font-family:var(--font-body,"Source Serif 4"),Georgia,serif;
-  font-size:calc(19px * var(--scale)); line-height:1.6;
+  font-size:calc(19px * var(--scale)); line-height:var(--line-height);
 }
 a{color:inherit;}
 button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit;}
 button{background:none;border:none;cursor:pointer;}
 input,select,textarea{background:var(--n100);border:1px solid var(--n400);border-radius:var(--radius);padding:10px 12px;}
 :focus-visible{outline:2px solid var(--color-accent);outline-offset:2px;}
+/* High contrast repaints the accent, so pin the focus ring to the text colour
+   there — an outline that blends into the background is not a focus ring. */
+:root[data-contrast="true"] :focus-visible{outline:3px solid var(--color-text);outline-offset:2px;}
+
+/* Underline links (WCAG 1.4.1): colour alone must not carry the meaning.
+   Excludes .btn/.chip, which are already bounded shapes, not inline text. */
+:root[data-underline="true"] a:not(.btn):not(.chip),
+:root[data-underline="true"] .btn-ghost{text-decoration:underline;text-underline-offset:3px;}
+
+/* Larger hit areas (WCAG 2.5.8). 48px is the AAA target size; the default
+   layout already meets 44px on primary controls. */
+:root[data-targets="large"] .btn,
+:root[data-targets="large"] .chip,
+:root[data-targets="large"] button,
+:root[data-targets="large"] input[type="checkbox"] + label,
+:root[data-targets="large"] .bottom-nav a{min-height:48px;}
+:root[data-targets="large"] .chip{padding:12px 18px;}
+:root[data-targets="large"] input[type="checkbox"],
+:root[data-targets="large"] input[type="radio"]{width:24px;height:24px;}
 .hair{border:none;border-top:1px solid var(--color-divider);margin:0;}
 .hair-thick{border:none;border-top:2px solid var(--color-text);margin:0;}
 .row-between{display:flex;align-items:center;justify-content:space-between;gap:var(--sp3);}
@@ -75,6 +113,14 @@ h3{font-size:calc(21px * var(--scale));font-weight:600;margin:0;}
 .status-dot.off{background:var(--n400);}
 .status-dot.alert{background:var(--color-accent-2);}
 
+/* Traffic-light levels for the daily check-in. The brand palette is teal and
+   magenta, which don't read as green/amber/red, so these are their own tokens.
+   Colour is never the only signal: every option is fully described in words. */
+.level-dot{width:12px;height:12px;border-radius:50%;display:inline-block;flex:none;border:1px solid color-mix(in srgb,var(--color-text) 35%,transparent);}
+.level-dot.green{background:var(--level-green);}
+.level-dot.orange{background:var(--level-orange);}
+.level-dot.red{background:var(--level-red);}
+
 .progress-bar{height:10px;background:var(--n200);border-radius:8px;overflow:hidden;}
 .progress-bar>span{display:block;height:100%;background:var(--color-accent);transition:width .5s ease;}
 
@@ -93,8 +139,12 @@ h3{font-size:calc(21px * var(--scale));font-weight:600;margin:0;}
 
 /* app shell */
 .app-shell{display:flex;flex-direction:column;min-height:100%;}
-.topbar{padding:var(--sp3) var(--sp4);border-bottom:2px solid var(--color-text);display:flex;align-items:center;gap:var(--sp3);position:sticky;top:0;background:var(--color-bg);z-index:20;}
-.logo{font-size:calc(24px * var(--scale));font-weight:700;display:flex;align-items:center;gap:8px;}
+/* The viewport is `viewport-fit=cover`, so every fixed/sticky edge has to pay
+   for the iPhone's notch, home indicator, and landscape side insets itself.
+   Without these, the top bar tucks under the status bar and the bottom nav
+   sits beneath the home indicator. */
+.topbar{padding:calc(var(--sp3) + env(safe-area-inset-top)) calc(var(--sp4) + env(safe-area-inset-right)) var(--sp3) calc(var(--sp4) + env(safe-area-inset-left));border-bottom:2px solid var(--color-text);display:flex;align-items:center;gap:var(--sp3);position:sticky;top:0;background:var(--color-bg);z-index:20;}
+.logo{font-size:calc(24px * var(--scale));font-weight:700;display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;}
 .logo i{color:var(--color-accent);}
 .topbar .spacer{flex:1;}
 .readbtn{border:1px solid var(--color-accent);color:var(--color-accent);padding:10px 16px;border-radius:var(--radius);font-size:calc(15px * var(--scale));font-weight:600;display:flex;align-items:center;gap:6px;white-space:nowrap;}
@@ -103,22 +153,32 @@ h3{font-size:calc(21px * var(--scale));font-weight:600;margin:0;}
 .pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--color-accent);animation:pulse 1.4s ease infinite;}
 @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 
-main.content{flex:1;max-width:900px;width:100%;margin:0 auto;padding:var(--sp6) var(--sp4) calc(var(--sp8) + 70px);}
+main.content{flex:1;max-width:900px;width:100%;margin:0 auto;padding:var(--sp6) calc(var(--sp4) + env(safe-area-inset-right)) calc(var(--sp8) + 70px + env(safe-area-inset-bottom)) calc(var(--sp4) + env(safe-area-inset-left));}
 
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;display:flex;border-top:1px solid var(--color-divider);background:var(--color-surface);z-index:20;}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;display:flex;border-top:1px solid var(--color-divider);background:var(--color-surface);z-index:20;padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right);}
 .bottom-nav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 8px;font-size:12px;color:var(--n600);text-decoration:none;min-height:56px;justify-content:center;}
 .bottom-nav a i{font-size:22px;}
 .bottom-nav a.active{color:var(--color-accent);}
-.bottom-nav .more-sheet{position:fixed;bottom:56px;left:0;right:0;background:var(--color-surface);border-top:1px solid var(--color-divider);padding:var(--sp3);display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.bottom-nav .more-sheet{position:fixed;bottom:calc(56px + env(safe-area-inset-bottom));left:0;right:0;background:var(--color-surface);border-top:1px solid var(--color-divider);padding:var(--sp3) calc(var(--sp3) + env(safe-area-inset-right)) var(--sp3) calc(var(--sp3) + env(safe-area-inset-left));display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
 .bottom-nav .more-sheet a{flex-direction:row;justify-content:flex-start;gap:10px;padding:10px;border-radius:6px;}
 .bottom-nav .more-sheet a:hover{background:var(--n100);}
 
 .safety-banner{background:var(--a100);border:1px solid var(--a300);border-radius:6px;padding:var(--sp3) var(--sp4);font-size:15px;color:var(--a900);margin-bottom:var(--sp4);}
+/* The accent scale isn't inverted for dark mode, so these two accent-tinted
+   panels would otherwise sit as bright light-blue islands on a dark page. */
+:root[data-dark="true"] .safety-banner,
+:root[data-dark="true"] .reader-banner{background:#0d2b36;border-color:#1c5468;color:#d6f2ff;}
 
 .list-row{display:flex;align-items:flex-start;gap:var(--sp3);padding:var(--sp3) 0;border-bottom:1px solid var(--color-divider);}
 .divider-section{margin-bottom:var(--sp6);}
 
 .landing-hero{text-align:center;padding:var(--sp8) var(--sp4) var(--sp6);max-width:640px;margin:0 auto;}
+/* auto-fit rather than a fixed column count: one column on a phone, two or
+   three on wider screens, with no breakpoint to keep in sync. */
+.home-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--sp3);}
+.home-feature{display:block;text-decoration:none;transition:border-color .15s ease;}
+.home-feature:hover{border-color:var(--color-accent);}
+:root[data-motion="reduced"] .home-feature{transition:none;}
 .auth-card{max-width:420px;margin:0 auto;padding:var(--sp6);}
 .auth-toggle{display:flex;justify-content:center;gap:var(--sp4);margin-bottom:var(--sp4);}
 .auth-toggle button{font-weight:600;padding-bottom:4px;border-bottom:2px solid transparent;}

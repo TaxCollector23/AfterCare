@@ -16,12 +16,14 @@
  * a streaming reader rather than EventSource.
  */
 
-import type {
-  Appointment as PlanAppointment,
-  Medication as PlanMedication,
-  RecoveryPlan,
-  TimelineEntry,
-  WarningSign,
+import {
+  ACTION_INSTRUCTION,
+  medicationSlots,
+  type AskGroundedResult,
+  type Appointment as PlanAppointment,
+  type Medication as PlanMedication,
+  type RecoveryPlan,
+  type TimelineEntry,
 } from "@discharge-guide/shared-types";
 import { apiBaseUrl } from "./config";
 import type { Appointment, Medication, RecoveryData, TimelineEvent } from "../types";
@@ -133,21 +135,9 @@ export interface ProcessEvent {
   error?: { code: string; message: string; retryable: boolean };
 }
 
-/** Reconnect backoff after a stream ends without saying how it ended. */
-const RECONNECT_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
-
 /**
  * Streams pipeline progress. Calls `onEvent` per stage, then exactly one of
  * `onComplete` / `onFailed`. Returns an abort function.
- *
- * The stream can end without a terminal event — the Vercel proxy caps how long
- * it will hold a streamed response, and the free API instance can restart
- * mid-pipeline. Both look identical here: `read()` reports `done` having sent
- * neither `complete` nor `failed`. Treating that as "nothing happened" is what
- * left the Processing screen saying "Reading your document" indefinitely, so a
- * silent end reconnects instead. Re-attaching is safe and cheap: GET /process
- * replays the stage history and answers immediately when the document already
- * finished. Once the retries are spent we report a failure rather than hang.
  */
 export function streamProcess(
   documentId: string,
@@ -157,97 +147,69 @@ export function streamProcess(
     onFailed?: (message: string) => void;
   }
 ): () => void {
-  let cancelled = false;
-  let controller = new AbortController();
-
-  /** Reads one connection. Resolves true when a terminal event arrived. */
-  async function readStream(): Promise<boolean> {
-    const res = await authedFetch(`/process/${documentId}`, {
-      signal: controller.signal,
-      headers: { Accept: "text/event-stream" },
-    });
-    if (!res.ok || !res.body) {
-      handlers.onFailed?.(await readError(res));
-      return true;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) return false;
-      buffer += decoder.decode(value, { stream: true });
-
-      // SSE frames are separated by a blank line.
-      let split: number;
-      while ((split = buffer.indexOf("\n\n")) !== -1) {
-        const frame = buffer.slice(0, split);
-        buffer = buffer.slice(split + 2);
-
-        let eventName = "message";
-        const dataLines: string[] = [];
-        for (const line of frame.split("\n")) {
-          if (line.startsWith("event:")) eventName = line.slice(6).trim();
-          else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-          // lines starting with ":" are heartbeats — ignored
-        }
-        if (dataLines.length === 0) continue;
-
-        let payload: unknown = null;
-        try {
-          payload = JSON.parse(dataLines.join("\n"));
-        } catch {
-          continue;
-        }
-
-        if (eventName === "complete") {
-          handlers.onComplete?.(payload as RecoveryPlan);
-          return true;
-        }
-        if (eventName === "failed") {
-          const err = payload as { message?: string };
-          handlers.onFailed?.(err.message ?? "Processing failed.");
-          return true;
-        }
-        handlers.onEvent?.({ stage: eventName, ...(payload as object) });
-      }
-    }
-  }
+  const controller = new AbortController();
 
   (async () => {
-    for (let attempt = 0; !cancelled; attempt += 1) {
-      try {
-        if (await readStream()) return;
-      } catch (err) {
-        if (cancelled || (err as Error)?.name === "AbortError") return;
-        // An expired session will never recover by retrying.
-        if (err instanceof SessionExpiredError) {
-          handlers.onFailed?.(err.message);
-          return;
-        }
-      }
-      if (cancelled) return;
-      if (attempt >= RECONNECT_DELAYS_MS.length) {
-        handlers.onFailed?.(
-          "We lost the connection while reading your document. It may still be processing — reopen it in a moment to check."
-        );
+    try {
+      const res = await authedFetch(`/process/${documentId}`, {
+        signal: controller.signal,
+        headers: { Accept: "text/event-stream" },
+      });
+      if (!res.ok || !res.body) {
+        handlers.onFailed?.(await readError(res));
         return;
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, RECONNECT_DELAYS_MS[attempt])
-      );
-      if (cancelled) return;
-      // A fresh controller: the previous one may already have been aborted.
-      controller = new AbortController();
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE frames are separated by a blank line.
+        let split: number;
+        while ((split = buffer.indexOf("\n\n")) !== -1) {
+          const frame = buffer.slice(0, split);
+          buffer = buffer.slice(split + 2);
+
+          let eventName = "message";
+          const dataLines: string[] = [];
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event:")) eventName = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+            // lines starting with ":" are heartbeats — ignored
+          }
+          if (dataLines.length === 0) continue;
+
+          let payload: unknown = null;
+          try {
+            payload = JSON.parse(dataLines.join("\n"));
+          } catch {
+            continue;
+          }
+
+          if (eventName === "complete") {
+            handlers.onComplete?.(payload as RecoveryPlan);
+            return;
+          }
+          if (eventName === "failed") {
+            const err = payload as { message?: string };
+            handlers.onFailed?.(err.message ?? "Processing failed.");
+            return;
+          }
+          handlers.onEvent?.({ stage: eventName, ...(payload as object) });
+        }
+      }
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      handlers.onFailed?.(err instanceof Error ? err.message : "Lost connection while processing.");
     }
   })();
 
-  return () => {
-    cancelled = true;
-    controller.abort();
-  };
+  return () => controller.abort();
 }
 
 /* --------------------------- plan + actions -------------------------- */
@@ -271,37 +233,30 @@ export async function backendMarkTaken(medicationId: string): Promise<void> {
   if (!res.ok) throw new Error(await readError(res));
 }
 
-export async function backendAsk(documentId: string, question: string) {
+/** Grounded answer plus the document lines it was drawn from. */
+export async function backendAsk(
+  documentId: string,
+  question: string
+): Promise<AskGroundedResult> {
   const res = await authedFetch("/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ documentId, question }),
   });
   if (!res.ok) throw new Error(await readError(res));
-  return (await res.json()) as { answer: string; confidence: number };
+  return (await res.json()) as AskGroundedResult;
 }
 
 /* ------------------------------ mapping ------------------------------ */
 
-function hasWord(haystack: string, word: string): boolean {
-  return new RegExp(`\\b${word}`, "i").test(haystack);
-}
-
+/** Slot booleans for the medication cards, from the shared schedule parser. */
 function splitTiming(timing: string, frequency: string) {
-  const text = `${timing} ${frequency}`;
-  const daily = /\bdaily\b|\bevery day\b|\bonce a day\b/i.test(text);
-  const twice = /\btwice\b|\bbid\b|\b2x\b/i.test(text);
-  const thrice = /\bthree times\b|\btid\b|\b3x\b/i.test(text);
-
-  const morning = hasWord(text, "morning") || hasWord(text, "am") || daily || twice || thrice;
-  const afternoon = hasWord(text, "afternoon") || hasWord(text, "noon") || thrice;
-  const evening =
-    hasWord(text, "evening") || hasWord(text, "night") || hasWord(text, "bedtime") || twice || thrice;
-
-  // If nothing matched at all, don't claim a schedule we didn't find.
-  return morning || afternoon || evening
-    ? { morning, afternoon, evening }
-    : { morning: false, afternoon: false, evening: false };
+  const slots = medicationSlots(timing, frequency);
+  return {
+    morning: slots.includes("morning"),
+    afternoon: slots.includes("afternoon"),
+    evening: slots.includes("evening"),
+  };
 }
 
 function splitDateTime(iso: string): { date: string; time: string } {
@@ -312,12 +267,6 @@ function splitDateTime(iso: string): { date: string; time: string } {
     time: parsed.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
   };
 }
-
-const ACTION_TEXT: Record<WarningSign["action"], string> = {
-  call_provider: "Call your provider",
-  emergency_room: "Go to the emergency room",
-  call_911: "Call emergency services",
-};
 
 function mapTimeline(entries: TimelineEntry[]): TimelineEvent[] {
   const today = new Date().setHours(0, 0, 0, 0);
@@ -333,6 +282,10 @@ function mapTimeline(entries: TimelineEntry[]): TimelineEvent[] {
       title: entry.label,
       description: entry.instructions,
       status,
+      // Kept so Today's Plan can place this step on a day itself, rather than
+      // re-deriving it from a status computed at mapping time.
+      date: entry.date,
+      sourceLines: entry.sourceLines,
     };
   });
 }
@@ -347,6 +300,9 @@ export function planToRecoveryData(plan: RecoveryPlan): RecoveryData {
     purpose: med.instructions,
     ...splitTiming(med.timing, med.frequency),
     foodInstructions: med.timing || undefined,
+    timing: med.timing,
+    takenAt: med.takenAt ?? [],
+    sourceLines: med.sourceLines,
   }));
 
   const appointments: Appointment[] = plan.appointments.map((appt) => {
@@ -359,18 +315,36 @@ export function planToRecoveryData(plan: RecoveryPlan): RecoveryData {
       date,
       time,
       notes: appt.notes,
+      // `date` above is localised for display and can't be parsed back; the
+      // follow-up priority needs the machine-readable instant.
+      isoDate: appt.date || undefined,
     };
   });
+
+  // The pipeline's explanation stage feeds both Explain Terms and the
+  // condition card. sourceExcerpt stays undefined: we have the cited line
+  // numbers, not the line text, and inventing an excerpt would be a fabrication.
+  const glossary = plan.explanations.map((explanation) => ({
+    id: explanation.id,
+    term: explanation.term,
+    plainLanguage: explanation.plainText,
+    sourceLines: explanation.sourceLines,
+    confidence: explanation.confidence,
+  }));
 
   return {
     documentId: plan.documentId,
     medications,
     appointments,
     timeline: mapTimeline(plan.timeline),
-    glossary: [],
+    glossary,
     faq: [],
     restrictions: [],
-    redFlagSymptoms: plan.warnings.map((w) => `${w.symptom} — ${ACTION_TEXT[w.action]}`),
+    redFlagSymptoms: plan.warnings.map((w) => `${w.symptom} — ${ACTION_INSTRUCTION[w.action]}`),
+    // The structured warnings are carried through as well as flattened: the
+    // symptom check-in escalates on `action`, which the display string loses.
+    warnings: plan.warnings,
+    processedAt: Date.now(),
     updatedAt: Date.now(),
   };
 }

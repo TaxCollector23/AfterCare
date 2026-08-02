@@ -16,27 +16,26 @@ import {
   planToRecoveryData,
   streamProcess,
 } from "./backend";
+import { markFinished, recordStageEvent } from "./processingProgress";
 import type { AppUser } from "./session";
 import type { RecoveryData, UploadedDocument } from "../types";
 
-// Kept in step with the API's upload filter (apps/api/src/routes/upload.ts) and
-// the OCR pipeline's IMAGE_MIME_TYPES. HEIC is deliberately absent: neither can
-// read it, so accepting it here only moves the failure to after the upload.
-// iOS Safari hands over a JPEG for both camera capture and library picks.
 const MAX_BYTES = 20 * 1024 * 1024;
 const ACCEPTED = [
   "application/pdf",
   "image/jpeg",
   "image/jpg",
   "image/png",
+  "image/heic",
+  "image/heif",
   "image/webp",
 ];
-const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png", ".webp"];
+const ACCEPTED_EXT = [".pdf", ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp"];
 
 export function validateFile(file: File): void {
   const name = file.name.toLowerCase();
   const ok = ACCEPTED.includes(file.type) || ACCEPTED_EXT.some((e) => name.endsWith(e));
-  if (!ok) throw new Error("Please choose a PDF or a photo (JPG, PNG, or WebP).");
+  if (!ok) throw new Error("Please choose a PDF or a photo (JPG, PNG, or HEIC).");
   if (file.size > MAX_BYTES) {
     throw new Error("That file is over 20MB. Try a smaller scan or a lower-resolution photo.");
   }
@@ -166,77 +165,17 @@ export async function uploadDocument(
   return { documentId, processing: false };
 }
 
-/**
- * Uploads documents that were saved while the app was in local mode.
- *
- * The free API instance sleeps, and a cold start takes longer than the startup
- * probe waits — so a page load can settle into local mode even though the
- * backend exists. Anything added in that window is written to IndexedDB only,
- * and the Dashboard promises it "fills in automatically once the AfterCare
- * service is connected". Nothing used to keep that promise: the document sat
- * there forever. This is what keeps it.
- *
- * Local-mode uploads are the ones left at "uploaded" — a document the backend
- * has seen is already "processing", "ready", or "error".
- */
-let migrating = false;
-export async function migrateLocalDocuments(user: AppUser): Promise<number> {
-  if (migrating || currentMode() !== "backend" || user.isLocal) return 0;
-  const stranded = local.listDocuments().filter((d) => d.status === "uploaded");
-  if (stranded.length === 0) return 0;
-
-  migrating = true;
-  let moved = 0;
-  try {
-    for (const doc of stranded) {
-      const blob = await local.getFile(doc.id).catch(() => null);
-      if (!blob) {
-        // Metadata without bytes can never be recovered; say so rather than
-        // leaving it looking like it is still on its way.
-        local.updateDocument(doc.id, {
-          status: "error",
-          errorMessage: "This document's file is no longer on this device. Please add it again.",
-        });
-        continue;
-      }
-      try {
-        const file = new File([blob], doc.fileName, {
-          type: blob.type || "application/octet-stream",
-        });
-        const { documentId } = await backendUpload(file);
-        // The API assigns its own id, so re-key rather than patch in place.
-        local.saveDocument({
-          ...doc,
-          id: documentId,
-          ownerUid: user.uid,
-          status: "processing",
-          updatedAt: Date.now(),
-        });
-        local.removeDocument(doc.id);
-        await local.deleteFile(doc.id).catch(() => {});
-        watchProcessing(documentId);
-        moved += 1;
-      } catch (err) {
-        local.updateDocument(doc.id, {
-          status: "error",
-          errorMessage:
-            err instanceof Error ? err.message : "We couldn't send that document for processing.",
-        });
-      }
-    }
-  } finally {
-    migrating = false;
-  }
-  return moved;
-}
-
 /** Subscribes to backend pipeline events and mirrors them into the local index. */
 export function watchProcessing(documentId: string): () => void {
   if (currentMode() !== "backend") return () => {};
 
   return streamProcess(documentId, {
-    onEvent: () => local.updateDocument(documentId, { status: "processing" }),
+    onEvent: (event) => {
+      local.updateDocument(documentId, { status: "processing" });
+      recordStageEvent(documentId, event.stage, event.status);
+    },
     onComplete: (plan) => {
+      markFinished(documentId);
       local.saveRecovery(planToRecoveryData(plan));
       local.updateDocument(documentId, { status: "ready" });
     },

@@ -4,6 +4,7 @@ rules_version = '2';
 //   users/{uid}                              -> profile + caregiverEmails (array of emails granted read access)
 //   users/{uid}/documents/{docId}             -> one uploaded discharge document + its processing status
 //   users/{uid}/documents/{docId}/recovery/current -> the structured guide derived from that document
+//   users/{uid}/alerts/{alertId}              -> a symptom check-in that escalated, raised to the care circle
 //
 // Access model:
 //   - The owner (auth.uid == uid) has full read/write access to everything under their own users/{uid}.
@@ -34,6 +35,15 @@ service cloud.firestore {
       allow read: if isOwner(uid) || isCaregiver(uid);
       // Only the owner may create/update their own profile (including caregiverEmails).
       allow write: if isOwner(uid);
+
+      // Symptom check-ins that reached an emergency-room / call-911 action.
+      // The patient raises them; the care circle reads them. Nobody edits or
+      // deletes one after the fact — an alert is a record of what was reported.
+      match /alerts/{alertId} {
+        allow read: if isOwner(uid) || isCaregiver(uid);
+        allow create: if isOwner(uid);
+        allow update, delete: if false;
+      }
 
       match /documents/{docId} {
         allow read: if isOwner(uid) || isCaregiver(uid);

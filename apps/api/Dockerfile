@@ -21,9 +21,6 @@ COPY --from=deps /repo/node_modules node_modules
 COPY --from=deps /repo/apps/api/node_modules apps/api/node_modules
 COPY --from=build /repo/packages/shared-types packages/shared-types
 COPY --from=build /repo/apps/api/dist apps/api/dist
-# tsc emits only JavaScript, so the migration SQL has to be copied alongside it.
-# runMigrations resolves this path relative to its own module at boot.
-COPY --from=build /repo/apps/api/src/db/migrations apps/api/dist/db/migrations
 
 WORKDIR /repo/apps/api
 EXPOSE 3001

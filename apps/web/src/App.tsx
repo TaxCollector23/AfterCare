@@ -1,16 +1,16 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
-import { migrateLocalDocuments } from "./services/documents";
 import { AccessibilityProvider } from "./hooks/useAccessibility";
 import { ReadAloudButton } from "./components/ReadAloudButton";
 import { AIStatusBanner } from "./components/AIStatusBanner";
 import { BottomNav } from "./components/BottomNav/BottomNav";
 
-import Landing from "./screens/Landing/Landing";
+import Home from "./screens/Home/Home";
 import Upload from "./screens/Upload/Upload";
 import Processing from "./screens/Processing/Processing";
 import Dashboard from "./screens/Dashboard/Dashboard";
+import TodaysPlan from "./screens/TodaysPlan/TodaysPlan";
+import CheckIn from "./screens/CheckIn/CheckIn";
 import Medication from "./screens/Medication/Medication";
 import Appointments from "./screens/Appointments/Appointments";
 import Timeline from "./screens/Timeline/Timeline";
@@ -38,19 +38,19 @@ function Guarded({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { loading, needsSignIn } = useAuth();
+  const { loading } = useAuth();
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          loading ? <Loading /> : needsSignIn ? <Landing /> : <Navigate to="/dashboard" replace />
-        }
-      />
+      {/* The homepage is the front door in every state: signed out it carries
+          the sign-in form, signed in it links straight through to the guide.
+          It no longer bounces to /dashboard, so there is somewhere to land. */}
+      <Route path="/" element={loading ? <Loading /> : <Home />} />
       <Route path="/upload" element={<Guarded><Upload /></Guarded>} />
       <Route path="/processing/:documentId" element={<Guarded><Processing /></Guarded>} />
       <Route path="/dashboard" element={<Guarded><Dashboard /></Guarded>} />
+      <Route path="/today" element={<Guarded><TodaysPlan /></Guarded>} />
+      <Route path="/check-in" element={<Guarded><CheckIn /></Guarded>} />
       <Route path="/medications" element={<Guarded><Medication /></Guarded>} />
       <Route path="/appointments" element={<Guarded><Appointments /></Guarded>} />
       <Route path="/timeline" element={<Guarded><Timeline /></Guarded>} />
@@ -65,25 +65,17 @@ function AppRoutes() {
 }
 
 export default function App() {
-  const { user, mode, needsSignIn } = useAuth();
-
-  // Documents added while the backend was asleep live only in this browser.
-  // Send them on as soon as there is a backend and an account to attach them
-  // to — including when the mode upgrades mid-session.
-  useEffect(() => {
-    if (mode !== "backend" || !user || user.isLocal) return;
-    void migrateLocalDocuments(user);
-  }, [mode, user]);
+  const { user, needsSignIn } = useAuth();
 
   return (
     <AccessibilityProvider>
       <div className="app-shell">
         <a href="#main-content" className="sr-only">Skip to main content</a>
         <header className="topbar">
-          <span className="logo">
+          <Link to="/" className="logo" aria-label="AfterCare — go to the homepage">
             <i className="ph-duotone ph-heartbeat" aria-hidden="true" />
             AfterCare
-          </span>
+          </Link>
           <span className="spacer" />
           <ReadAloudButton />
         </header>

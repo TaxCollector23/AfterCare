@@ -8,6 +8,12 @@
     "light": "#3BB3BD",
     "dark": "#0A5A61"
   },
+  "favicon": "/apps/web/public/favicon.svg",
+  "logo": {
+    "light": "/apps/web/public/favicon.svg",
+    "dark": "/apps/web/public/favicon.svg",
+    "href": "https://aftercare-web-eta.vercel.app"
+  },
   "navigation": {
     "groups": [
       {

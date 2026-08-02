@@ -3,12 +3,17 @@ import { NavLink } from "react-router-dom";
 
 const PRIMARY = [
   { to: "/dashboard", label: "Home", icon: "ph-rows" },
+  { to: "/today", label: "Today", icon: "ph-sun-horizon" },
   { to: "/medications", label: "Meds", icon: "ph-pill" },
   { to: "/timeline", label: "Timeline", icon: "ph-clock-counter-clockwise" },
   { to: "/appointments", label: "Visits", icon: "ph-calendar-check" },
 ];
 
 const MORE = [
+  // `end` matters only for "/": without it a NavLink to the root path counts
+  // as active on every route, so this entry would always look selected.
+  { to: "/", label: "About AfterCare", icon: "ph-info", end: true },
+  { to: "/check-in", label: "Daily Check-in", icon: "ph-traffic-signal" },
   { to: "/upload", label: "Documents", icon: "ph-file-text" },
   { to: "/terms", label: "Explain Terms", icon: "ph-book-open-text" },
   { to: "/ask", label: "Ask a Question", icon: "ph-question" },
@@ -39,7 +44,7 @@ export function BottomNav() {
       {moreOpen && (
         <div className="more-sheet" role="menu">
           {MORE.map((item) => (
-            <NavLink key={item.to} to={item.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)} className={({ isActive }) => (isActive ? "active" : "")}>
               <i className={`ph-duotone ${item.icon}`} aria-hidden="true" />
               {item.label}
             </NavLink>

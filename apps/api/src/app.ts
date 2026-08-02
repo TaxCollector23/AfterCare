@@ -1,9 +1,9 @@
 import cors from "cors";
 import express from "express";
-import { MulterError } from "multer";
 import { ZodError } from "zod";
 import { cacheStatus, pingCache } from "./cache/index.js";
 import { config } from "./config.js";
+import { corsOriginDelegate } from "./cors.js";
 import { databaseHealth } from "./db/client.js";
 import { providerCooldownStatus } from "./integrations/aiProviderWaterfall.js";
 import { AiApiError, AppError } from "./errors.js";
@@ -39,7 +39,7 @@ export function createApp(options: CreateAppOptions = {}) {
   app.set("trust proxy", 1);
   app.use(
     cors({
-      origin: config.WEB_ORIGIN ?? false,
+      origin: corsOriginDelegate(config.WEB_ORIGIN),
       credentials: true,
       methods: ["GET", "POST", "OPTIONS"],
       allowedHeaders: ["Authorization", "Content-Type", "Last-Event-ID"],
@@ -135,26 +135,9 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       if (error instanceof Error && error.message === "Unsupported file type") {
-        res.status(415).json({
-          error: "Please upload a PDF or a photo (JPG, PNG, or WebP).",
-          code: "UNSUPPORTED_MEDIA_TYPE",
-        });
-        return;
-      }
-      // Without this, an oversized file surfaces as a bare 500 and the browser
-      // shows "Unexpected server error" for something the user can act on.
-      if (error instanceof MulterError) {
-        if (error.code === "LIMIT_FILE_SIZE") {
-          res.status(413).json({
-            error:
-              "That file is over 20MB. Try a smaller scan, fewer pages, or a lower-resolution photo.",
-            code: "FILE_TOO_LARGE",
-          });
-          return;
-        }
         res
-          .status(400)
-          .json({ error: "That upload wasn't readable.", code: error.code });
+          .status(415)
+          .json({ error: error.message, code: "UNSUPPORTED_MEDIA_TYPE" });
         return;
       }
       res

@@ -105,26 +105,6 @@ export async function putFile(id: string, file: Blob): Promise<void> {
   db.close();
 }
 
-/** Drops a document from the local index. Used once it lives on the API. */
-export function removeDocument(id: string): void {
-  const all = readJson<UploadedDocument[]>(DOCS_KEY, []);
-  const remaining = all.filter((d) => d.id !== id);
-  if (remaining.length === all.length) return;
-  writeJson(DOCS_KEY, remaining);
-  notify();
-}
-
-export async function deleteFile(id: string): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error("Could not remove that file"));
-  });
-  db.close();
-}
-
 export async function getFile(id: string): Promise<Blob | null> {
   const db = await openDb();
   const blob = await new Promise<Blob | null>((resolve, reject) => {

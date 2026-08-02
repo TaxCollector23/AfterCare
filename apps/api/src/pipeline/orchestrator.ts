@@ -79,6 +79,16 @@ function publicPlan(plan: PipelineRecoveryPlan): RecoveryPlan {
       confidence: entry.confidence,
       sourceLines: entry.sourceLines,
     })),
+    // The explanation stage's output is part of the contract: the web app's
+    // Explain Terms screen and condition card both read it, and without it
+    // they render empty no matter what the pipeline found.
+    explanations: plan.explanations.map((explanation) => ({
+      id: explanation.id,
+      term: explanation.term,
+      plainText: explanation.plainText,
+      confidence: explanation.confidence,
+      sourceLines: explanation.sourceLines,
+    })),
     isPlaceholder: false,
   };
 }

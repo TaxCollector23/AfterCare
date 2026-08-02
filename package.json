@@ -12,7 +12,7 @@
     "format": "prettier --write \"apps/api/**/*.{ts,json}\" \"apps/web/**/*.{ts,tsx,json}\" \"packages/shared-types/**/*.{ts,json}\" \"docs/**/*.{md,yaml}\" \"*.{json,yaml}\"",
     "format:check": "prettier --check \"apps/api/**/*.{ts,json}\" \"apps/web/**/*.{ts,tsx,json}\" \"packages/shared-types/**/*.{ts,json}\" \"docs/**/*.{md,yaml}\" \"*.{json,yaml}\"",
     "lint": "eslint apps/api/src apps/web/src packages/shared-types/src",
-    "test": "pnpm --filter @discharge-guide/api test",
+    "test": "pnpm --filter @discharge-guide/api test && pnpm --filter @dischargeguide/web test",
     "typecheck": "pnpm --filter @discharge-guide/api... --filter @dischargeguide/web typecheck"
   },
   "devDependencies": {

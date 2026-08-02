@@ -1,6 +1,35 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { assessFollowUp } from "@discharge-guide/shared-types";
 import { RecoveryGate } from "../../components/RecoveryGate";
 import { Card } from "../../components/Cards/Card";
+import { ConditionCard } from "../../components/ConditionCard";
+import { FollowUpBadge } from "../../components/FollowUpBadge";
+import { SignOutButton } from "../../components/SignOutButton";
+import { dosesFor, mergeTakenAt, subscribeDoses } from "../../services/adherence";
+import { checkInsFor, subscribeCheckIns } from "../../services/checkIns";
+import type { RecoveryData } from "../../types";
+
+function FollowUpSummary({ data }: { data: RecoveryData }) {
+  // Both logs live outside the guide, so re-render when either changes.
+  const [, setTick] = useState(0);
+  useEffect(() => subscribeDoses(() => setTick((n) => n + 1)), []);
+  useEffect(() => subscribeCheckIns(() => setTick((n) => n + 1)), []);
+
+  const logged = dosesFor(data.documentId);
+  const assessment = assessFollowUp({
+    medications: data.medications.map((med) => ({
+      timing: med.timing,
+      frequency: med.frequency,
+      takenAt: mergeTakenAt(med.takenAt, logged[med.id]),
+    })),
+    checkIns: checkInsFor(data.documentId),
+    appointments: data.appointments.map((appt) => ({ isoDate: appt.isoDate })),
+    processedAt: data.processedAt ?? data.updatedAt,
+  });
+
+  return <FollowUpBadge assessment={assessment} />;
+}
 
 export default function Dashboard() {
   return (
@@ -14,6 +43,9 @@ export default function Dashboard() {
       <RecoveryGate>
         {(data) => (
           <>
+            <FollowUpSummary data={data} />
+            <ConditionCard glossary={data.glossary} />
+
             <Card title="Restrictions" icon="ph-shield-warning">
               {data.restrictions.length === 0 ? (
                 <p className="gloss">
@@ -71,6 +103,15 @@ export default function Dashboard() {
           </>
         )}
       </RecoveryGate>
+
+      {/* Outside the gate on purpose: signing out must work even when there is
+          no document yet and the gate is showing its empty state. */}
+      <div
+        className="divider-section"
+        style={{ marginTop: "var(--sp6)", paddingTop: "var(--sp4)", borderTop: "1px solid var(--color-divider)" }}
+      >
+        <SignOutButton />
+      </div>
     </div>
   );
 }
