@@ -1,13 +1,13 @@
 /**
  * LLM client wrapper used by every pipeline stage.
  *
- * Multi-provider fallback waterfall: OpenAI -> Gemini (3 keys) -> OpenRouter (2 keys) -> Anthropic (2 keys).
+ * Multi-provider fallback waterfall: OpenAI -> Gemini (3 keys) -> OpenRouter (2 keys).
  * Each provider gets its own retry/backoff; if a provider's retries are
  * exhausted (or it's not configured — missing API key), the waterfall moves
  * to the next one. Only throws once every configured provider has failed.
  *
  * Env vars: OPENAI_API_KEY, GEMINI_API_KEY, GEMINI_API_KEY_2, GEMINI_API_KEY_3,
- * OPENROUTER_API_KEY, OPENROUTER_API_KEY_2, ANTHROPIC_API_KEY, ANTHROPIC_API_KEY_2.
+ * OPENROUTER_API_KEY, OPENROUTER_API_KEY_2.
  * Any tier with no key set is skipped, not treated as an error.
  */
 import OpenAI from 'openai';
@@ -56,20 +56,6 @@ function getOpenRouter(tier: 0 | 1): OpenAI | null {
     });
   }
   return openrouterClients[tier];
-}
-
-const anthropicClients: [OpenAI | null, OpenAI | null] = [null, null];
-function getAnthropic(tier: 0 | 1): OpenAI | null {
-  const keyNames = ['ANTHROPIC_API_KEY', 'ANTHROPIC_API_KEY_2'];
-  const apiKey = process.env[keyNames[tier]];
-  if (!apiKey) return null;
-  if (!anthropicClients[tier]) {
-    anthropicClients[tier] = new OpenAI({
-      apiKey,
-      baseURL: 'https://api.anthropic.com/v1',
-    });
-  }
-  return anthropicClients[tier];
 }
 
 function isRetryableStatus(status: number | undefined): boolean {
@@ -202,8 +188,6 @@ export async function callJson<T = unknown>(opts: JsonCallOptions): Promise<T> {
   if (getGemini(2)) attempts.push({ name: 'gemini-3', run: () => geminiJson(2, fullSystem, user, maxRetries) });
   if (getOpenRouter(0)) attempts.push({ name: 'openrouter-1', run: () => openaiJson(fullSystem, user, model, maxRetries) });
   if (getOpenRouter(1)) attempts.push({ name: 'openrouter-2', run: () => openaiJson(fullSystem, user, model, maxRetries) });
-  if (getAnthropic(0)) attempts.push({ name: 'anthropic-1', run: () => openaiJson(fullSystem, user, model, maxRetries) });
-  if (getAnthropic(1)) attempts.push({ name: 'anthropic-2', run: () => openaiJson(fullSystem, user, model, maxRetries) });
 
   const raw = await runWaterfall(attempts);
   try {
