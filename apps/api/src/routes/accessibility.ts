@@ -7,14 +7,14 @@ const defaults = {
   darkMode: false,
   highContrast: false,
   reduceMotion: false,
-  voiceReading: false
+  voiceReading: false,
 };
 const preferencesSchema = z.object({
   textSize: z.enum(["large", "very_large"]),
   darkMode: z.boolean(),
   highContrast: z.boolean(),
   reduceMotion: z.boolean(),
-  voiceReading: z.boolean()
+  voiceReading: z.boolean(),
 });
 
 export const accessibilityRouter = Router();

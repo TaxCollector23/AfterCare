@@ -2,7 +2,7 @@ import type {
   Appointment,
   Medication,
   RecoveryPlan,
-  StructuredAiError
+  StructuredAiError,
 } from "@discharge-guide/shared-types";
 
 export interface UserRecord {

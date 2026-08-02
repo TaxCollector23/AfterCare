@@ -7,7 +7,7 @@ import {
   completeDriveAuthorization,
   getDriveAuthorization,
   googleDriveStatus,
-  importDriveFile
+  importDriveFile,
 } from "../integrations/googleDrive.js";
 import { hashFile, storeDocument } from "../integrations/storage.js";
 import { pipelineQueue } from "../queue/pipelineQueue.js";
@@ -26,7 +26,9 @@ driveRouter.post("/auth", (req, res, next) => {
 
 driveCallbackRouter.get("/callback", async (req, res, next) => {
   try {
-    const parsed = z.object({ code: z.string().min(1), state: z.string().min(1) }).parse(req.query);
+    const parsed = z
+      .object({ code: z.string().min(1), state: z.string().min(1) })
+      .parse(req.query);
     const result = await completeDriveAuthorization(parsed.code, parsed.state);
     req.userId = result.userId;
     res.json({ connected: true });
@@ -42,11 +44,19 @@ driveRouter.post("/import", async (req, res, next) => {
     const fileHash = hashFile(imported.bytes);
     const duplicate = repository.findDocumentByHash(fileHash, req.userId!);
     if (duplicate) {
-      res.json({ documentId: duplicate.id, status: duplicate.status, deduplicated: true });
+      res.json({
+        documentId: duplicate.id,
+        status: duplicate.status,
+        deduplicated: true,
+      });
       return;
     }
     const documentId = randomUUID();
-    const storageKey = await storeDocument(req.userId!, documentId, imported.bytes);
+    const storageKey = await storeDocument(
+      req.userId!,
+      documentId,
+      imported.bytes,
+    );
     repository.createDocument({
       id: documentId,
       userId: req.userId!,
@@ -55,10 +65,12 @@ driveRouter.post("/import", async (req, res, next) => {
       fileHash,
       storageKey,
       uploadedAt: new Date().toISOString(),
-      status: "uploaded"
+      status: "uploaded",
     });
     pipelineQueue.enqueue(documentId);
-    res.status(202).json({ documentId, status: "processing", deduplicated: false });
+    res
+      .status(202)
+      .json({ documentId, status: "processing", deduplicated: false });
   } catch (error) {
     next(error);
   }
@@ -66,14 +78,20 @@ driveRouter.post("/import", async (req, res, next) => {
 
 driveRouter.post("/backup", async (req, res, next) => {
   try {
-    const { documentId } = z.object({ documentId: z.string().uuid() }).parse(req.body);
+    const { documentId } = z
+      .object({ documentId: z.string().uuid() })
+      .parse(req.body);
     const document = repository.findDocument(documentId, req.userId!);
     if (!document?.plan) {
       res.status(404).json({ error: "Recovery plan not found" });
       return;
     }
     const bytes = Buffer.from(JSON.stringify(document.plan, null, 2));
-    const result = await backupDriveFile(req.userId!, `recovery-guide-${documentId}.json`, bytes);
+    const result = await backupDriveFile(
+      req.userId!,
+      `recovery-guide-${documentId}.json`,
+      bytes,
+    );
     res.status(201).json(result);
   } catch (error) {
     next(error);
