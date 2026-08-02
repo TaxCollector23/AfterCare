@@ -48,7 +48,7 @@ export async function askGrounded(
     confidence: Math.max(0, Math.min(100, raw.confidence ?? 0)),
     source: VALID_SOURCES.includes(raw.source as GroundedAnswer['source']) ? raw.source! : 'not-found',
     // Drop any cited line that doesn't actually exist, regardless of source.
-    sourceLines: Array.isArray(raw.sourceLines) ? raw.sourceLines.filter((n) => validLines.has(n)) : [],
+    sourceLines: Array.isArray(raw.sourceLines) ? raw.sourceLines.filter((n) => typeof n === 'number' && Number.isInteger(n) && validLines.has(n)) : [],
   };
 
   // Defense in depth: don't trust the model's own grounding claim — verify
