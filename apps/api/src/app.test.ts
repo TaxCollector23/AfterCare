@@ -748,6 +748,116 @@ describe("DischargeGuide API", () => {
       .expect(404);
   });
 
+  it("lists the authenticated user's documents newest first with processing state", async () => {
+    const token = await register();
+    const user = repository.findUserByEmail("patient@example.com")!;
+    const olderId = "00000000-0000-4000-8000-000000000020";
+    const newerId = "00000000-0000-4000-8000-000000000021";
+    repository.createDocument({
+      id: olderId,
+      userId: user.id,
+      filename: "older.pdf",
+      mimeType: "application/pdf",
+      fileHash: "list-hash-older",
+      storageKey: "list-key-older",
+      uploadedAt: "2026-01-01T00:00:00.000Z",
+      status: "ready",
+      plan: {
+        documentId: olderId,
+        status: "ready",
+        disclaimer: "Not medical advice.",
+        isPlaceholder: false,
+        warnings: [],
+        timeline: [],
+        medications: [],
+        appointments: [],
+      },
+    });
+    repository.createDocument({
+      id: newerId,
+      userId: user.id,
+      filename: "newer.pdf",
+      mimeType: "application/pdf",
+      fileHash: "list-hash-newer",
+      storageKey: "list-key-newer",
+      uploadedAt: "2026-02-01T00:00:00.000Z",
+      status: "failed",
+      failure: {
+        code: "AI_PROVIDER_UNAVAILABLE",
+        message: "AI processing is temporarily unavailable.",
+        retryable: true,
+      },
+    });
+
+    const response = await request(app)
+      .get("/documents")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(response.body.data.map((d: { id: string }) => d.id)).toEqual([
+      newerId,
+      olderId,
+    ]);
+    expect(response.body.data[0]).toMatchObject({
+      filename: "newer.pdf",
+      status: "failed",
+      originalUrl: `/documents/${newerId}/original`,
+      planReady: false,
+    });
+    expect(response.body.data[0].failure.retryable).toBe(true);
+    expect(response.body.data[1]).toMatchObject({
+      filename: "older.pdf",
+      status: "ready",
+      planReady: true,
+      failure: null,
+    });
+  });
+
+  it("never lists another user's documents", async () => {
+    const token = await register();
+    await register("list-other@example.com");
+    const otherUser = repository.findUserByEmail("list-other@example.com")!;
+    repository.createDocument({
+      id: "00000000-0000-4000-8000-000000000022",
+      userId: otherUser.id,
+      filename: "secret.pdf",
+      mimeType: "application/pdf",
+      fileHash: "list-hash-other",
+      storageKey: "list-key-other",
+      uploadedAt: "2026-03-01T00:00:00.000Z",
+      status: "ready",
+    });
+
+    const response = await request(app)
+      .get("/documents")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(response.body.data).toEqual([]);
+  });
+
+  it("requires authentication to list documents", async () => {
+    await request(app).get("/documents").expect(401);
+  });
+
+  it("lists a freshly uploaded document as it transitions through the pipeline", async () => {
+    const token = await register();
+    const upload = await request(app)
+      .post("/upload")
+      .set("authorization", `Bearer ${token}`)
+      .attach("document", Buffer.from("list-upload"), {
+        filename: "instructions.pdf",
+        contentType: "application/pdf",
+      })
+      .expect(202);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const response = await request(app)
+      .get("/documents")
+      .set("authorization", `Bearer ${token}`)
+      .expect(200);
+    expect(response.body.data[0].id).toBe(upload.body.documentId);
+    expect(response.body.data[0].filename).toBe("instructions.pdf");
+  });
+
   it("rate limits /ask separately from the general API limit", async () => {
     const limitedApp = createApp({ askRateLimit: 2 });
 

@@ -4,6 +4,22 @@ import { deleteStoredDocument, loadDocument } from "../integrations/storage.js";
 
 export const documentsRouter = Router();
 
+documentsRouter.get("/", (req, res) => {
+  const documents = repository
+    .listDocuments(req.userId!)
+    .map((document) => ({
+      id: document.id,
+      filename: document.filename,
+      mimeType: document.mimeType,
+      status: document.status,
+      uploadedAt: document.uploadedAt,
+      failure: document.failure ?? null,
+      originalUrl: `/documents/${document.id}/original`,
+      planReady: document.status === "ready" && document.plan !== undefined,
+    }));
+  res.json({ data: documents });
+});
+
 documentsRouter.get("/:documentId/original", async (req, res, next) => {
   try {
     const document = repository.findDocument(
