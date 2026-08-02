@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { detectMode, type DataMode } from "../services/config";
+import { detectMode, onBackendAvailable, type DataMode } from "../services/config";
 import { resolveUser, requiresSignIn, type AppUser } from "../services/session";
 
 interface AuthState {
@@ -34,6 +34,12 @@ function start(): Promise<void> {
   if (!started) started = load();
   return started;
 }
+
+// If the backend was merely asleep rather than absent, re-resolve the session so
+// the app moves out of local mode on its own instead of needing a manual reload.
+onBackendAvailable(() => {
+  void load();
+});
 
 /** Re-reads the session — call after sign-in / sign-out. */
 export async function refreshAuth(): Promise<void> {
