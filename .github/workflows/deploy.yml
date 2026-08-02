@@ -1,10 +1,35 @@
 name: Deploy
-# Deployment is handled via Vercel's own git integration / CLI for apps/web.
-# No custom deploy steps needed here yet.
+
 on:
+  push:
+    branches: [main]
   workflow_dispatch: {}
+
 jobs:
-  noop:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Deployment handled by Vercel."
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @discharge/web build
+
+      - name: Deploy to Vercel
+        uses: BetaHuhn/deploy-to-vercel-action@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          PRODUCTION: true
