@@ -1,0 +1,10 @@
+name: Deploy
+# Deployment is handled via Vercel's own git integration / CLI for apps/web.
+# No custom deploy steps needed here yet.
+on:
+  workflow_dispatch: {}
+jobs:
+  noop:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deployment handled by Vercel."
