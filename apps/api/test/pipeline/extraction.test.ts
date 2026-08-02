@@ -58,12 +58,20 @@ describe("runExtraction", () => {
     });
   });
 
-  it("returns a failed StageResult when the model call throws", async () => {
+  it("falls back to keyword-based sectioning when the model call throws", async () => {
     callJsonMock.mockRejectedValueOnce(new Error("rate limited"));
 
-    const result = await runExtraction(makeOcr(["some text"]));
+    const result = await runExtraction(
+      makeOcr([
+        "Follow-up with primary care in 1 week.",
+        "Seek urgent care for chest pain.",
+      ]),
+    );
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("rate limited");
+    expect(result.success).toBe(true);
+    expect(result.degraded).toBe(true);
+    expect(result.confidence).toBe(65);
+    expect(result.data?.appointmentsText).toContain("1: Follow-up");
+    expect(result.data?.warningsText).toContain("2: Seek urgent care");
   });
 });

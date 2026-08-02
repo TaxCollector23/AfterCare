@@ -20,6 +20,23 @@ export function databaseStatus() {
   } as const;
 }
 
+/**
+ * Live readiness probe for /health. In memory mode there is nothing to
+ * check, so the database is always healthy; with a configured pool it runs
+ * a trivial query and reports failure on any error.
+ */
+export async function databaseHealth(): Promise<
+  ReturnType<typeof databaseStatus> & { ok: boolean }
+> {
+  if (!pool) return { ...databaseStatus(), ok: true };
+  try {
+    await pool.query("SELECT 1");
+    return { ...databaseStatus(), ok: true };
+  } catch {
+    return { ...databaseStatus(), ok: false };
+  }
+}
+
 /** Closes the Postgres pool. Call on graceful shutdown; safe to call even if never configured. */
 export async function closeDatabase(): Promise<void> {
   if (pool) await pool.end();

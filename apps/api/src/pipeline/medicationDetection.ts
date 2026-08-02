@@ -7,8 +7,12 @@
  */
 import { callJson } from "../integrations/openai.js";
 import {
+  fallbackConfidence,
+  fallbackMedications,
+} from "./heuristicFallback.js";
+import {
   ok,
-  fail,
+  degradedOk,
   type Medication,
   type OcrResult,
   type StageResult,
@@ -91,9 +95,12 @@ export async function detectMedications(
       overall,
       result.flatMap((m) => m.sourceLines),
     );
-  } catch (err) {
-    return fail(
-      err instanceof Error ? err.message : "Medication detection failed",
+  } catch {
+    const fallback = fallbackMedications(medicationsText, fullOcr);
+    return degradedOk(
+      fallback,
+      fallbackConfidence(fallback),
+      fallback.flatMap((medication) => medication.sourceLines),
     );
   }
 }

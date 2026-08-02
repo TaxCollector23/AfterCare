@@ -1,9 +1,9 @@
 import cors from "cors";
 import express from "express";
-import { MulterError } from "multer";
 import { ZodError } from "zod";
+import { cacheStatus, pingCache } from "./cache/index.js";
 import { config } from "./config.js";
-import { databaseStatus } from "./db/client.js";
+import { databaseHealth } from "./db/client.js";
 import { AiApiError, AppError } from "./errors.js";
 import { googleDriveStatus } from "./integrations/googleDrive.js";
 import { storageStatus } from "./integrations/storage.js";
@@ -43,12 +43,23 @@ export function createApp(options: CreateAppOptions = {}) {
   app.use(express.json({ limit: "1mb" }));
   app.use(hipaaAuditLog);
 
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
+  app.get("/health", async (_req, res) => {
+    // /health is Render's healthCheckPath: it must fail loudly (503) when a
+    // configured dependency is down so a degraded instance gets restarted
+    // instead of serving "ok" from a broken backend. Unconfigured pieces
+    // (memory DB, no Redis) are healthy by definition.
+    const database = await databaseHealth();
+    const cache = cacheStatus();
+    const databaseOk = database.ok;
+    const cacheOk = !cache.configured || (await pingCache());
+    const ok = databaseOk && cacheOk;
+    res.status(ok ? 200 : 503).json({
+      status: ok ? "ok" : "degraded",
       service: "discharge-guide-api",
-      database: databaseStatus(),
+      database,
       storage: storageStatus(),
+      cache,
+      queue: queue.getStats(),
       integrations: [googleDriveStatus()],
       // Ops visibility into the free-tier AI waterfall: which providers are
       // configured (never their keys) and the per-provider request timeout.
@@ -112,26 +123,9 @@ export function createApp(options: CreateAppOptions = {}) {
         return;
       }
       if (error instanceof Error && error.message === "Unsupported file type") {
-        res.status(415).json({
-          error: "Please upload a PDF or a photo (JPG, PNG, or WebP).",
-          code: "UNSUPPORTED_MEDIA_TYPE",
-        });
-        return;
-      }
-      // Without this, an oversized file surfaces as a bare 500 and the browser
-      // shows "Unexpected server error" for something the user can act on.
-      if (error instanceof MulterError) {
-        if (error.code === "LIMIT_FILE_SIZE") {
-          res.status(413).json({
-            error:
-              "That file is over 20MB. Try a smaller scan, fewer pages, or a lower-resolution photo.",
-            code: "FILE_TOO_LARGE",
-          });
-          return;
-        }
         res
-          .status(400)
-          .json({ error: "That upload wasn't readable.", code: error.code });
+          .status(415)
+          .json({ error: error.message, code: "UNSUPPORTED_MEDIA_TYPE" });
         return;
       }
       res

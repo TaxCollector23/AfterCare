@@ -8,8 +8,12 @@
 import { randomUUID } from "node:crypto";
 import { callJson } from "../integrations/openai.js";
 import {
+  fallbackConfidence,
+  fallbackExplanations,
+} from "./heuristicFallback.js";
+import {
   ok,
-  fail,
+  degradedOk,
   type Explanation,
   type OcrResult,
   type StageResult,
@@ -82,9 +86,12 @@ export async function generateExplanations(
       overall,
       result.flatMap((e) => e.sourceLines),
     );
-  } catch (err) {
-    return fail(
-      err instanceof Error ? err.message : "Explanation generation failed",
+  } catch {
+    const fallback = fallbackExplanations(ocr);
+    return degradedOk(
+      fallback,
+      fallbackConfidence(fallback),
+      fallback.flatMap((explanation) => explanation.sourceLines),
     );
   }
 }

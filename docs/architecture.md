@@ -81,18 +81,21 @@ and supply database, encryption, S3, JWT, and Google credentials before producti
 
 ## Deployment
 
-The Vite frontend is deployed by Vercel using the root `vercel.json`. Set
-`VITE_API_BASE_URL` in the Vercel project to the public HTTPS origin of the Render API.
-The remaining `VITE_*` variables in `apps/web/.env.example` are optional browser-side
-integrations and must never contain server secrets.
+The Vite frontend is deployed by Vercel using the root `vercel.json`. The
+production rewrite proxies `/api/*` to the Render API, so the public app can use
+same-origin API calls without `VITE_API_BASE_URL`. Set `VITE_API_BASE_URL` only
+for custom environments that do not use the rewrite. The remaining `VITE_*`
+variables in `apps/web/.env.example` are optional browser-side integrations and
+must never contain server secrets.
 
 The root `render.yaml` defines the Express API as a Docker web service. Render generates
 the JWT secrets and restricts CORS to
 `https://aftercare-web-eta.vercel.app`. Enter `OPENAI_API_KEY`,
 `GEMINI_API_KEY_PRIMARY`, and `GEMINI_API_KEY_FALLBACK` in the Render Blueprint setup;
-the Blueprint never stores their values in Git. Also enter a base64-encoded 32-byte
-`STORAGE_ENCRYPTION_KEY`. Add database, S3, or Google Drive
-credentials in Render only when those integrations are intentionally enabled.
+the Blueprint never stores their values in Git. Also enter `STORAGE_ENCRYPTION_KEY`
+as a 32-byte base64/base64url key, a 64-character hex key, or a 32+ byte raw
+secret. A good default is `openssl rand -base64 32`. Add database, S3, or Google
+Drive credentials in Render only when those integrations are intentionally enabled.
 
 The API health endpoint is `/health`. Render's service logs include build output,
 startup failures, health-check failures, and sanitized request audit events.
