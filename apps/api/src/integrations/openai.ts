@@ -1,7 +1,10 @@
 /**
  * LLM client wrapper used by every pipeline stage.
  *
- * Multi-provider fallback waterfall: OpenAI -> Gemini (2 keys) -> OpenRouter (2 keys).
+ * Split responsibilities:
+ * - JSON/Text (extraction, detection, explanations, /ask): OpenAI -> OpenRouter (2 keys)
+ * - Vision/Images (OCR, image transcription): Gemini (2 keys)
+ *
  * Each provider gets its own retry/backoff; if a provider's retries are
  * exhausted (or it's not configured — missing API key), the waterfall moves
  * to the next one. Only throws once every configured provider has failed.
@@ -193,9 +196,9 @@ async function geminiJson(tier: 0 | 1, system: string, user: string, maxRetries?
 }
 
 /**
- * Calls the model in JSON mode and returns the parsed object, falling back
- * from OpenAI to Gemini (two keys) if earlier tiers fail or aren't
- * configured. Throws once every configured provider has failed.
+ * Calls the model in JSON mode (text/extraction only) and returns the parsed object.
+ * Falls back: OpenAI -> OpenRouter (2 keys). Gemini is reserved for vision.
+ * Throws once every configured provider has failed.
  */
 export async function callJson<T = unknown>(opts: JsonCallOptions): Promise<T> {
   const { system, user, schemaHint, model = OPENAI_MODEL, maxRetries } = opts;
@@ -203,8 +206,6 @@ export async function callJson<T = unknown>(opts: JsonCallOptions): Promise<T> {
 
   const attempts: Attempt[] = [];
   if (getOpenAI()) attempts.push({ name: 'openai', run: () => openaiJson(fullSystem, user, model, maxRetries) });
-  if (getGemini(0)) attempts.push({ name: 'gemini-1', run: () => geminiJson(0, fullSystem, user, maxRetries) });
-  if (getGemini(1)) attempts.push({ name: 'gemini-2', run: () => geminiJson(1, fullSystem, user, maxRetries) });
   if (getOpenRouter(0)) attempts.push({ name: 'openrouter-1', run: () => openaiJson(fullSystem, user, model, maxRetries) });
   if (getOpenRouter(1)) attempts.push({ name: 'openrouter-2', run: () => openaiJson(fullSystem, user, model, maxRetries) });
 
@@ -269,8 +270,8 @@ async function geminiVision(tier: 0 | 1, buffer: Buffer, mimeType: string): Prom
 }
 
 /**
- * Transcribes an image to plain text via a vision-capable model, falling
- * back from OpenAI to Gemini (two keys) if earlier tiers fail.
+ * Transcribes an image to plain text via Gemini vision (fallback: Gemini key 2).
+ * OpenAI is reserved for text/JSON extraction.
  *
  * Only accepts image MIME types — vision APIs take rasterized images, not
  * raw PDF bytes. Callers with a scanned/no-text-layer PDF must rasterize
@@ -287,7 +288,6 @@ export async function visionTranscribe(buffer: Buffer, mimeType: string): Promis
   }
 
   const attempts: Attempt[] = [];
-  if (getOpenAI()) attempts.push({ name: 'openai', run: () => openaiVision(buffer, mimeType) });
   if (getGemini(0)) attempts.push({ name: 'gemini-1', run: () => geminiVision(0, buffer, mimeType) });
   if (getGemini(1)) attempts.push({ name: 'gemini-2', run: () => geminiVision(1, buffer, mimeType) });
 
