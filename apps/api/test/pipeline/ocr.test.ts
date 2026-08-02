@@ -1,11 +1,19 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 
-// Force the "no text layer" branch regardless of the real PDF's content, so
-// this test can exercise real rasterization (pdf-to-img is NOT mocked)
-// against a real PDF file without needing an actual scanned document on disk.
-vi.mock("pdf-parse/lib/pdf-parse.js", () => ({
-  default: vi.fn(async () => ({ text: "", numpages: 5 })),
+// Force the "no text layer" branch regardless of the PDF's real content, so
+// these tests exercise the rasterization path without needing a genuinely
+// scanned document on disk.
+vi.mock("unpdf", () => ({
+  getDocumentProxy: vi.fn(async () => ({})),
+  extractText: vi.fn(async () => ({ text: "", totalPages: 5 })),
 }));
+
+// `pdf-to-img` needs the native `canvas` build, which is absent from CI images
+// and serverless runtimes. Stub it so these tests cover our own orchestration —
+// page ordering, bounded concurrency, error propagation — not a third-party
+// rasterizer.
+const { rasterizeMock } = vi.hoisted(() => ({ rasterizeMock: vi.fn() }));
+vi.mock("pdf-to-img", () => ({ pdf: rasterizeMock }));
 
 const { visionTranscribeMock } = vi.hoisted(() => ({
   visionTranscribeMock: vi.fn(),
@@ -48,7 +56,24 @@ function createEmptyPdf(pageCount: number): Buffer {
 
 const REAL_PDF = createEmptyPdf(5);
 
-describe("runOcr ? scanned PDF rasterization (real pdf-to-img, mocked vision)", () => {
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function fakeRasterizedDoc(pageCount: number) {
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (let i = 0; i < pageCount; i++) {
+        yield Buffer.concat([PNG_MAGIC, Buffer.from(`page-${i + 1}`)]);
+      }
+    },
+  };
+}
+
+describe("runOcr - scanned PDF rasterization (stubbed rasterizer, mocked vision)", () => {
+  beforeEach(() => {
+    visionTranscribeMock.mockReset();
+    rasterizeMock.mockReset().mockResolvedValue(fakeRasterizedDoc(5));
+  });
+
   it("rasterizes every real page and transcribes each one through the vision waterfall, in order", async () => {
     const buffer = REAL_PDF;
     let call = 0;
@@ -57,9 +82,7 @@ describe("runOcr ? scanned PDF rasterization (real pdf-to-img, mocked vision)", 
         call++;
         // Confirm we're actually being handed a real rasterized PNG, not a stub.
         expect(mimeType).toBe("image/png");
-        expect(imageBuffer.subarray(0, 8)).toEqual(
-          Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-        );
+        expect(imageBuffer.subarray(0, 8)).toEqual(PNG_MAGIC);
         return `page ${call} text`;
       },
     );
