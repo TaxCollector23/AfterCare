@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { repository } from "../db/repository.js";
-import { isStructuredAiError, toAiApiError } from "../errors.js";
+import { AppError, isStructuredAiError, toAiApiError } from "../errors.js";
 import { askGrounded } from "../pipeline/ask.js";
 
 const bodySchema = z.object({
@@ -38,7 +38,10 @@ export function createAskRouter(ask: AskGroundedFunction = askGrounded) {
       }
       res.json(answer);
     } catch (error) {
-      next(toAiApiError(error));
+      // Only genuine AI failures become an AI error. An AppError already
+      // carries a public, accurate status and message — funnelling it through
+      // toAiApiError relabelled every one of them as a retryable AI outage.
+      next(error instanceof AppError ? error : toAiApiError(error));
     }
   });
   return router;

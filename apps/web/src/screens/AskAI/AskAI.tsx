@@ -3,7 +3,7 @@ import { citationText } from "@discharge-guide/shared-types";
 import { RecoveryGate } from "../../components/RecoveryGate";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorBanner } from "../../components/ErrorBanner";
-import { backendAsk } from "../../services/backend";
+import { ApiError, backendAsk } from "../../services/backend";
 import { currentMode } from "../../services/config";
 import type { FaqEntry, RecoveryData } from "../../types";
 
@@ -106,7 +106,9 @@ function AskTheDocument({
     sourceLines: number[];
   } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; retryable: boolean } | null>(
+    null
+  );
 
   const trimmed = question.trim();
 
@@ -122,9 +124,13 @@ function AskTheDocument({
         sourceLines: result.source?.sourceLines ?? [],
       });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Couldn't answer that just now."
-      );
+      setError({
+        message:
+          err instanceof Error ? err.message : "Couldn't answer that just now.",
+        // "Try again" on a permanent failure is a trap — it invites the patient
+        // to keep pressing a button that cannot work.
+        retryable: err instanceof ApiError ? err.retryable : true,
+      });
     } finally {
       setBusy(false);
     }
@@ -141,7 +147,12 @@ function AskTheDocument({
         Ask my document
       </button>
 
-      {error && <ErrorBanner message={error} onRetry={() => setError(null)} />}
+      {error && (
+        <ErrorBanner
+          message={error.message}
+          onRetry={error.retryable ? () => setError(null) : undefined}
+        />
+      )}
 
       {answer && (
         <div className="card" style={{ marginTop: "var(--sp3)" }}>

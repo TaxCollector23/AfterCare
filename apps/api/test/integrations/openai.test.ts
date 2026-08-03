@@ -53,11 +53,13 @@ beforeEach(() => {
 });
 
 describe("provider SDK adapters", () => {
-  it("returns a safe structured error when no provider is configured", async () => {
+  it("reports an unconfigured deployment as config-missing, not a retryable outage", async () => {
+    // Retryable would be a lie: no amount of retrying configures a provider,
+    // and it left the Ask screen offering "Try again" forever.
     await expect(callJson({ system: "s", user: "u" })).rejects.toEqual({
-      code: "AI_PROVIDER_UNAVAILABLE",
-      message: "AI processing is temporarily unavailable.",
-      retryable: true,
+      code: "AI_PROVIDER_CONFIG_MISSING",
+      message: "AI processing is not configured.",
+      retryable: false,
     });
     expect(openaiCreateMock).not.toHaveBeenCalled();
     expect(geminiGenerateContentMock).not.toHaveBeenCalled();

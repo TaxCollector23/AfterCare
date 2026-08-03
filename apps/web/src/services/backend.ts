@@ -70,9 +70,37 @@ export function clearSession(): void {
   writeTokens(null);
 }
 
+/**
+ * An API failure that keeps the server's own code and retryability.
+ *
+ * Without these, every failure looked alike to the UI, so a permanent one
+ * (a document whose stored copy is gone) was offered with a "Try again"
+ * button that could never succeed.
+ */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | undefined,
+    readonly retryable: boolean,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function readApiError(res: Response): Promise<ApiError> {
+  const body = (await res.json().catch(() => null)) as
+    | { error?: string; message?: string; code?: string; retryable?: boolean }
+    | null;
+  const message = body?.error ?? body?.message ?? `Request failed (${res.status})`;
+  // Default to retryable only for 5xx: a 4xx won't change on a second press.
+  const retryable = body?.retryable ?? res.status >= 500;
+  return new ApiError(message, body?.code, retryable, res.status);
+}
+
 async function readError(res: Response): Promise<string> {
-  const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
-  return body?.error ?? body?.message ?? `Request failed (${res.status})`;
+  return (await readApiError(res)).message;
 }
 
 async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -256,7 +284,7 @@ export async function backendAsk(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ documentId, question }),
   });
-  if (!res.ok) throw new Error(await readError(res));
+  if (!res.ok) throw await readApiError(res);
   return (await res.json()) as AskGroundedResult;
 }
 

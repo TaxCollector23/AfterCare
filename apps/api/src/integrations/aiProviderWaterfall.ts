@@ -51,6 +51,12 @@ const PROVIDER_UNAVAILABLE: StructuredAiError = {
   retryable: true,
 };
 
+const PROVIDER_CONFIG_MISSING: StructuredAiError = {
+  code: "AI_PROVIDER_CONFIG_MISSING",
+  message: "AI processing is not configured.",
+  retryable: false,
+};
+
 const VALIDATION_FAILED: StructuredAiError = {
   code: "AI_VALIDATION_FAILED",
   message: "The request could not be processed safely.",
@@ -222,6 +228,13 @@ export async function runAiProviderWaterfall<T>(
       apiKey: normalizedCredential(credentials.geminiFallback),
     },
   ];
+
+  // No credentials at all is a deployment mistake, not an outage. Reporting it
+  // as "temporarily unavailable / retryable" sent users into an endless
+  // "try again" loop for something that will never come back on its own.
+  if (!providers.some((provider) => provider.apiKey)) {
+    return { ...PROVIDER_CONFIG_MISSING };
+  }
 
   const now = Date.now();
   for (const provider of providers) {

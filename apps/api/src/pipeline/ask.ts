@@ -11,6 +11,7 @@ import type {
 import type { GroundedAnswer, OcrResult } from "./types.js";
 import { cacheOcr, ocrCacheKey } from "../cache/index.js";
 import { repository } from "../db/repository.js";
+import { AppError } from "../errors.js";
 import { loadDocument } from "../integrations/storage.js";
 import { callJson } from "../integrations/openai.js";
 import {
@@ -117,15 +118,32 @@ export async function askGrounded(
   // document from re-running OCR (expensive for scanned PDFs). The storage
   // read stays inside the compute callback so a cache hit skips it too.
   // Only successful OCR results are cached, so transient failures retry.
-  const ocr = await cacheOcr(
-    ocrCacheKey(document.fileHash),
-    async () =>
-      runOcr({
-        buffer: await loadDocument(document.storageKey),
-        mimeType: document.mimeType,
-      }),
-    (result) => result.success === true,
-  );
+  let ocr;
+  try {
+    ocr = await cacheOcr(
+      ocrCacheKey(document.fileHash),
+      async () =>
+        runOcr({
+          buffer: await loadDocument(document.storageKey),
+          mimeType: document.mimeType,
+        }),
+      (result) => result.success === true,
+    );
+  } catch (error) {
+    // The stored bytes are gone — typically an instance restart while storage
+    // is in memory (S3 unconfigured). Reporting this as a temporary AI outage
+    // sends the patient into an endless "try again" loop for something no
+    // amount of retrying can fix, so it is surfaced as its own condition.
+    if (error instanceof AppError && error.code === "NOT_FOUND") {
+      throw new AppError(
+        410,
+        "We no longer have a readable copy of that document. Please upload it again.",
+        "DOCUMENT_UNAVAILABLE",
+      );
+    }
+    throw error;
+  }
+
   if (!ocr.success || !ocr.data) {
     return {
       code: "AI_PROVIDER_UNAVAILABLE",
